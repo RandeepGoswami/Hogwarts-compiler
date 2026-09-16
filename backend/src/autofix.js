@@ -48,9 +48,14 @@ function fixLiteralMismatch(lineText, varName, expected, actual) {
   if (actual === 'string' && expected !== 'string') {
     const quoted = lineText.match(/"((?:[^"\\]|\\.)*)"/);
     if (quoted && isValidLiteralFor(expected, quoted[1])) {
+      // char literals need single quotes ('A'), not bare text — unquoting
+      // entirely would turn the value into an undeclared identifier.
+      const replacement = expected === 'char' ? `'${quoted[1]}'` : quoted[1];
       return {
-        text: lineText.slice(0, quoted.index) + quoted[1] + lineText.slice(quoted.index + quoted[0].length),
-        note: `unquoted "${quoted[1]}" so it reads as ${expected}, not string`,
+        text: lineText.slice(0, quoted.index) + replacement + lineText.slice(quoted.index + quoted[0].length),
+        note: expected === 'char'
+          ? `changed "${quoted[1]}" to the char literal '${quoted[1]}'`
+          : `unquoted "${quoted[1]}" so it reads as ${expected}, not string`,
       };
     }
     const retyped = retypeDeclaration(lineText, varName, 'string');
@@ -83,91 +88,123 @@ function retypeDeclaration(lineText, varName, newType) {
 function escapeReg(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 /**
- * One deterministic pass over the diagnostics from a single compile.
- * Returns { lines, fixes } — fixes is a human-readable log of what
- * changed, in the order the edits were found (not application order).
+ * Try to build a fixed candidate for a single diagnostic, against the
+ * CURRENT line array (which may already carry earlier accepted fixes).
+ * Returns { lines, note } — a full replacement line array, never a
+ * mutation of the one passed in — or null if this diagnostic shape
+ * isn't one we know how to pattern-fix.
  */
-function deterministicPass(source, diagnostics) {
-  const lines = source.split('\n');
-  const insertions = new Map(); // 1-based line -> array of lines to insert before it
-  const fixes = [];
-  const alreadyDeclared = new Set();
+function buildCandidate(lines, d) {
+  const raw = lines[d.line - 1];
+  if (raw === undefined) return null;
 
-  const addInsertion = (line, text, note) => {
-    if (!insertions.has(line)) insertions.set(line, []);
-    insertions.get(line).push(text);
-    fixes.push({ line, note });
-  };
-
-  for (const d of diagnostics) {
-    if (d.severity !== 'error') continue;
-    const raw = lines[d.line - 1]; // current text — may already carry earlier fixes on this line
-    if (raw === undefined) continue;
-
-    // 1. Declaration or assignment type mismatch with a known expected/actual type.
-    if (d.expected && d.actual && d.varName && /Cannot (initialise|assign)/.test(d.message)) {
-      const fix = fixLiteralMismatch(raw, d.varName, d.expected, d.actual);
-      if (fix) {
-        lines[d.line - 1] = fix.text;
-        fixes.push({ line: d.line, note: `line ${d.line}: ${fix.note}` });
-        continue;
-      }
+  // 1. Declaration or assignment type mismatch with a known expected/actual type.
+  if (d.expected && d.actual && d.varName && /Cannot (initialise|assign)/.test(d.message)) {
+    const fix = fixLiteralMismatch(raw, d.varName, d.expected, d.actual);
+    if (fix) {
+      const next = lines.slice();
+      next[d.line - 1] = fix.text;
+      return { lines: next, note: `line ${d.line}: ${fix.note}` };
     }
-
-    // 2. Assigning to a const variable — remove const from its declaration.
-    if (/Cannot assign to const variable/.test(d.message) && d.varName) {
-      const declMatch = d.message.match(/declared on line (\d+)/);
-      const declLine = declMatch ? Number(declMatch[1]) : null;
-      if (declLine && lines[declLine - 1] !== undefined) {
-        const declText = lines[declLine - 1]; // current text of the declaring line
-        const constRe = new RegExp(`\\bconst\\s+(${TYPE_KEYWORDS.join('|')}\\s+${escapeReg(d.varName)}\\b)`);
-        const m = declText.match(constRe);
-        if (m) {
-          lines[declLine - 1] = declText.slice(0, m.index) + m[1] + declText.slice(m.index + m[0].length);
-          fixes.push({ line: declLine, note: `line ${declLine}: removed const from "${d.varName}" so it can be reassigned` });
-          continue;
-        }
-      }
-    }
-
-    // 3. Undeclared identifier — insert a stub declaration just above its first use.
-    if (/^Undeclared identifier|^Assignment to undeclared variable/.test(d.message) && d.varName) {
-      if (!alreadyDeclared.has(d.varName)) {
-        const indent = (raw.match(/^\s*/) || [''])[0];
-        addInsertion(d.line, `${indent}int ${d.varName} = 0; // auto-fix: "${d.varName}" was never declared`,
-          `line ${d.line}: declared missing variable "${d.varName}" as int, defaulted to 0`);
-        alreadyDeclared.add(d.varName);
-      }
-      continue;
-    }
-
-    // 4. A condition that can never be tested for truth (e.g. a bare string).
-    if (/condition has type "string"|never a truth value/.test(d.message)) {
-      const m = raw.match(/(if|while)\s*\(([^)]*)\)/);
-      if (m) {
-        const inner = m[2].trim();
-        lines[d.line - 1] = raw.slice(0, m.index) + `${m[1]} (${inner} != "")` + raw.slice(m.index + m[0].length);
-        fixes.push({ line: d.line, note: `line ${d.line}: compared the ${m[1]}-condition to "" instead of testing it directly` });
-        continue;
-      }
-    }
-
-    // 5. Division or modulo by a literal zero.
-    if (/Division by a constant zero/.test(d.message)) {
-      const m = raw.match(/([/%])\s*0\b/);
-      if (m) {
-        lines[d.line - 1] = raw.slice(0, m.index) + m[1] + ' 1' + raw.slice(m.index + m[0].length)
-          + '  // auto-fix: divisor changed from 0 to 1 to avoid a runtime trap';
-        fixes.push({ line: d.line, note: `line ${d.line}: changed the divisor from 0 to 1 — check this is the value you actually meant` });
-        continue;
-      }
-    }
+    return null;
   }
 
-  // Insertions apply last, bottom-to-top, so earlier line numbers used above stay valid.
-  const insertLines = [...insertions.keys()].sort((a, b) => b - a);
-  for (const line of insertLines) {
-    lines.splice(line - 1, 0, ...insertions.get(line));
+  // 2. Assigning to a const variable — remove const from its declaration.
+  if (/Cannot assign to const variable/.test(d.message) && d.varName) {
+    const declMatch = d.message.match(/declared on line (\d+)/);
+    const declLine = declMatch ? Number(declMatch[1]) : null;
+    if (declLine && lines[declLine - 1] !== undefined) {
+      const declText = lines[declLine - 1];
+      const constRe = new RegExp(`\\bconst\\s+(${TYPE_KEYWORDS.join('|')}\\s+${escapeReg(d.varName)}\\b)`);
+      const m = declText.match(constRe);
+      if (m) {
+        const next = lines.slice();
+        next[declLine - 1] = declText.slice(0, m.index) + m[1] + declText.slice(m.index + m[0].length);
+        return { lines: next, note: `line ${declLine}: removed const from "${d.varName}" so it can be reassigned` };
+      }
+    }
+    return null;
+  }
+
+  // 3. Undeclared identifier — insert a stub declaration just above its first use.
+  if (/^Undeclared identifier|^Assignment to undeclared variable/.test(d.message) && d.varName) {
+    const indent = (raw.match(/^\s*/) || [''])[0];
+    const next = lines.slice();
+    next.splice(d.line - 1, 0, `${indent}int ${d.varName} = 0; // auto-fix: "${d.varName}" was never declared`);
+    return { lines: next, note: `line ${d.line}: declared missing variable "${d.varName}" as int, defaulted to 0` };
+  }
+
+  // 4. A condition that can never be tested for truth (e.g. a bare string).
+  if (/condition has type "string"|never a truth value/.test(d.message)) {
+    const m = raw.match(/(if|while)\s*\(([^)]*)\)/);
+    if (m) {
+      const inner = m[2].trim();
+      const next = lines.slice();
+      next[d.line - 1] = raw.slice(0, m.index) + `${m[1]} (${inner} != "")` + raw.slice(m.index + m[0].length);
+      return { lines: next, note: `line ${d.line}: compared the ${m[1]}-condition to "" instead of testing it directly` };
+    }
+    return null;
+  }
+
+  // 5. Division or modulo by a literal zero.
+  if (/Division by a constant zero/.test(d.message)) {
+    const m = raw.match(/([/%])\s*0\b/);
+    if (m) {
+      const next = lines.slice();
+      next[d.line - 1] = raw.slice(0, m.index) + m[1] + ' 1' + raw.slice(m.index + m[0].length)
+        + '  // auto-fix: divisor changed from 0 to 1 to avoid a runtime trap';
+      return { lines: next, note: `line ${d.line}: changed the divisor from 0 to 1 — check this is the value you actually meant` };
+    }
+    return null;
+  }
+
+  return null;
+}
+
+/**
+ * Deterministic pass, applied and VERIFIED one fix at a time — this is
+ * what the module header always claimed: every candidate is applied to
+ * a copy, the whole program is recompiled, and a "fix" that doesn't
+ * actually reduce the total error count (even by making something else
+ * worse) is discarded instead of kept. Previously the whole batch was
+ * applied unconditionally and only checked once at the end, so a single
+ * edit — e.g. retyping a declaration to `string` — could silently break
+ * every other numeric use of that variable and the regression would
+ * never be caught. Now each edit stands or falls on its own.
+ *
+ * Re-diagnoses after every accepted edit rather than reusing the
+ * original diagnostic list, because insertions shift every line number
+ * below them and a fixed variable can make later diagnostics on it
+ * disappear on their own.
+ */
+function deterministicPass(source) {
+  let lines = source.split('\n');
+  let errors = compile(lines.join('\n')).diagnostics.filter((d) => d.severity === 'error');
+  const fixes = [];
+  const rejected = new Set(); // `${line}:${message}` we've already tried and discarded
+
+  let progressed = true;
+  while (progressed) {
+    progressed = false;
+    for (const d of errors) {
+      const key = `${d.line}:${d.message}`;
+      if (rejected.has(key)) continue;
+
+      const candidate = buildCandidate(lines, d);
+      if (!candidate) { rejected.add(key); continue; }
+
+      const candidateCode = candidate.lines.join('\n');
+      const candidateErrors = compile(candidateCode).diagnostics.filter((x) => x.severity === 'error');
+
+      if (candidateErrors.length < errors.length) {
+        lines = candidate.lines;
+        errors = candidateErrors;
+        fixes.push({ line: d.line, note: candidate.note });
+        progressed = true;
+        break; // diagnostics/line numbers may have shifted — rescan from a fresh list
+      }
+      rejected.add(key);
+    }
   }
 
   return { code: lines.join('\n'), fixes };
@@ -213,7 +250,7 @@ async function autofix(originalCode, callAgent) {
     };
   }
 
-  const det = deterministicPass(originalCode, before.diagnostics);
+  const det = deterministicPass(originalCode);
   const afterDet = compile(det.code);
   const afterDetErrors = afterDet.diagnostics.filter((d) => d.severity === 'error');
 
