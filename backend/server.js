@@ -1,308 +1,259 @@
 /**
- * Department of Magical Syntax — AI Agent Backend
- * ---------------------------------------------------------
- * Deterministic lexing/parsing/type-checking happens here in real code
- * (that's how a real compiler pipeline works — you don't want an LLM
- * guessing whether "9.5" is a float). The AI AGENT is used for the two
- * jobs that genuinely benefit from a language model:
- *   1. Explaining a type error like a Hogwarts professor ("Sorting Hat")
- *   2. Suggesting an optimization pass over the generated code
+ * Lumos — backend
+ * -----------------------------------------------------------------
+ * A real six-phase compiler (lexer → parser → semantic analysis → IR
+ * → optimizer → x86-64 codegen) plus an AI layer that does the two
+ * jobs a language model is actually good at:
  *
- * The agent is powered directly by the OpenAI API
- * (https://platform.openai.com/docs/api-reference/chat), authenticated
- * with your own OPENAI_API_KEY.
+ *   1. Explaining a diagnostic in plain language, with a fix.
+ *   2. Reviewing the whole program and the optimizer's own decisions.
+ *
+ * The compiler itself is deterministic. You never want an LLM
+ * guessing whether "9.5" is a float.
  */
 
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const { compile } = require('./src/compiler');
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '200kb' }));
+app.use(express.json({ limit: '400kb' }));
 
 const PORT = process.env.PORT || 4000;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-const OPENAI_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
+const MAX_SOURCE_BYTES = 40000;
 
 // ---------------------------------------------------------------------
-// AI agent call helper
+// AI helper
 // ---------------------------------------------------------------------
-async function callAgent(messages, { temperature = 0.7, max_tokens = 400 } = {}) {
-  if (!OPENAI_API_KEY) {
-    return { ok: false, reason: 'no_token' };
-  }
+async function callAgent(systemPrompt, userPrompt, { temperature = 0.6, maxOutputTokens = 500 } = {}) {
+  if (!GEMINI_API_KEY) return { ok: false, reason: 'no_token' };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
 
   try {
-    const resp = await fetch(OPENAI_ENDPOINT, {
+    const resp = await fetch(`${GEMINI_ENDPOINT}?key=${GEMINI_API_KEY}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
-        model: OPENAI_MODEL,
-        messages,
-        temperature,
-        max_tokens,
+        systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] },
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig: { temperature, maxOutputTokens },
       }),
     });
 
     if (!resp.ok) {
-      const errText = await resp.text().catch(() => '');
-      console.error('OpenAI API error', resp.status, errText);
-      return { ok: false, reason: 'api_error', status: resp.status, detail: errText };
+      const detail = await resp.text().catch(() => '');
+      console.error('Gemini API error', resp.status, detail);
+      return { ok: false, reason: 'api_error', status: resp.status, detail };
     }
 
     const data = await resp.json();
-    const content = data?.choices?.[0]?.message?.content?.trim();
-    if (!content) return { ok: false, reason: 'empty_response' };
+    const candidate = data && data.candidates && data.candidates[0];
+    const content = candidate && candidate.content && candidate.content.parts
+      ? candidate.content.parts.map((p) => p.text || '').join('').trim()
+      : '';
+    if (!content) {
+      return { ok: false, reason: 'empty_response', detail: (candidate && candidate.finishReason) || 'unknown' };
+    }
     return { ok: true, content };
   } catch (err) {
-    console.error('OpenAI API request failed', err);
-    return { ok: false, reason: 'network_error', detail: String(err) };
+    const aborted = err && err.name === 'AbortError';
+    console.error('Gemini request failed', err);
+    return { ok: false, reason: aborted ? 'timeout' : 'network_error', detail: String(err) };
+  } finally {
+    clearTimeout(timeout);
   }
-}
-
-// ---------------------------------------------------------------------
-// Deterministic type checker (Phases 1 & 2 — real, no AI)
-// ---------------------------------------------------------------------
-function typeCheck(code) {
-  const lines = code.split('\n');
-  let hasError = false;
-  let errorContext = null;
-  const validDeclarations = [];
-  const declRegex = /^\s*(int|float|double|string|char|bool)\s+([a-zA-Z_]\w*)\s*=\s*(.+);/;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (
-      !line ||
-      line.startsWith('//') ||
-      line.startsWith('#') ||
-      line.includes('main') ||
-      line.includes('return') ||
-      line === '{' ||
-      line === '}'
-    ) {
-      continue;
-    }
-
-    const match = line.match(declRegex);
-    if (!match) continue;
-
-    const expectedType = match[1];
-    const varName = match[2];
-    const rawValue = match[3].trim();
-    let inferredType = 'unknown';
-
-    if (/^"[^"]*"$/.test(rawValue)) inferredType = 'string';
-    else if (/^'[^']'$/.test(rawValue)) inferredType = 'char';
-    else if (/^-?\d+\.\d+f?$/.test(rawValue)) inferredType = 'float';
-    else if (/^-?\d+$/.test(rawValue)) inferredType = 'int';
-    else if (rawValue === 'true' || rawValue === 'false') inferredType = 'bool';
-
-    let isValid = expectedType === inferredType;
-    if ((expectedType === 'float' || expectedType === 'double') && inferredType === 'int') {
-      isValid = true;
-    }
-
-    if (isValid) {
-      validDeclarations.push({ type: expectedType, name: varName, val: rawValue });
-    } else {
-      hasError = true;
-      errorContext = {
-        line: i + 1,
-        varName,
-        expected: expectedType,
-        actual: inferredType,
-        value: rawValue,
-      };
-      break;
-    }
-  }
-
-  return { hasError, errorContext, validDeclarations };
-}
-
-// ---------------------------------------------------------------------
-// Deterministic unoptimized codegen (Phase 3 — real, no AI)
-// ---------------------------------------------------------------------
-function generateCode(declarations) {
-  const asm = [];
-  asm.push('; --- MAGICAL ASSEMBLY (x86-64 STACK ALLOCATION) ---');
-  asm.push('section .data');
-  declarations.forEach((d) => {
-    if (d.type === 'string') asm.push(`  ${d.name}_str: .string ${d.val}`);
-  });
-  asm.push('section .text');
-  asm.push('  push rbp');
-  asm.push('  mov rbp, rsp');
-
-  let stackOffset = 4;
-  declarations.forEach((d) => {
-    if (['int', 'float', 'char', 'bool'].includes(d.type)) {
-      asm.push(`  ; store ${d.name} on stack`);
-      asm.push(`  mov DWORD PTR [rbp-${stackOffset}], ${d.val}`);
-      stackOffset += 4;
-    } else if (d.type === 'string') {
-      asm.push(`  ; store ${d.name} string pointer`);
-      asm.push(`  mov QWORD PTR [rbp-${stackOffset}], OFFSET FLAT:${d.name}_str`);
-      stackOffset += 8;
-    }
-  });
-
-  asm.push('  pop rbp');
-  asm.push('  ret');
-  return asm;
 }
 
 // ---------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------
-
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, aiConfigured: Boolean(OPENAI_API_KEY), model: OPENAI_MODEL });
+  res.json({
+    ok: true,
+    aiConfigured: Boolean(GEMINI_API_KEY),
+    model: GEMINI_MODEL,
+    provider: 'gemini',
+    phases: 6,
+    version: '3.0.0',
+  });
 });
 
-/**
- * Runs the full deterministic pipeline (type check + codegen).
- * Returns structured results; the frontend decides which AI endpoint
- * to call next (explain-error or optimize).
- */
-app.post('/api/pipeline/run', (req, res) => {
+/** Full pipeline. Deterministic, no AI, no network. */
+function runCompile(req, res) {
   const { code } = req.body || {};
   if (typeof code !== 'string') {
     return res.status(400).json({ error: 'code (string) is required' });
   }
-
-  const { hasError, errorContext, validDeclarations } = typeCheck(code);
-
-  if (hasError) {
-    return res.json({ hasError: true, errorContext });
+  if (Buffer.byteLength(code, 'utf8') > MAX_SOURCE_BYTES) {
+    return res.status(413).json({ error: `Source is too large (limit ${MAX_SOURCE_BYTES} bytes).` });
   }
 
-  const asm = generateCode(validDeclarations);
-  return res.json({ hasError: false, declarations: validDeclarations, asm });
-});
-
-/**
- * AI AGENT — Type-checking assistant.
- * Takes the deterministic error context and asks the model to explain
- * it in-theme and suggest a fix.
- */
-app.post('/api/ai/explain-error', async (req, res) => {
-  const { line, varName, expected, actual, value } = req.body || {};
-  if (!varName || !expected || !actual) {
-    return res.status(400).json({ error: 'line, varName, expected, actual, value are required' });
-  }
-
-  const messages = [
-    {
-      role: 'system',
-      content:
-        "You are the Sorting Hat acting as a magical compiler's type-checking assistant, " +
-        'in the Department of Magical Syntax at Hogwarts. You explain C++-style type errors ' +
-        'in 2-3 sentences, in a warm, witty, Harry-Potter-flavored voice, using light wizarding ' +
-        'metaphors (splinching, spells, wands, houses) without overdoing it. Always end with a ' +
-        'concrete, correct fix the student can apply. Keep it under 80 words. No markdown.',
-    },
-    {
-      role: 'user',
-      content:
-        `Line ${line}: variable "${varName}" was declared as type "${expected}" ` +
-        `but assigned a value ("${value}") that is actually type "${actual}". ` +
-        'Explain the mismatch and how to fix it.',
-    },
-  ];
-
-  const result = await callAgent(messages, { temperature: 0.8, max_tokens: 200 });
-
-  if (result.ok) {
-    return res.json({ source: 'ai', explanation: result.content });
-  }
-
-  // Graceful fallback so the app still works without a configured token.
-  const fallback =
-    expected === 'int' && actual === 'string'
-      ? `You are trying to stuff a text string into an integer vessel! Change the type of ${varName} to string, or remove the quotes for a numerical value.`
-      : expected === 'string' && actual === 'int'
-      ? `Numbers cannot be treated as text! Wrap your value in double quotes (like "${value}") to turn it into a valid string.`
-      : `You declared ${expected} but gave it a ${actual}. Adjust your data type to match your value.`;
-
-  return res.json({ source: 'fallback', reason: result.reason, explanation: fallback });
-});
-
-/**
- * AI AGENT — Code optimizer.
- * Takes the valid declarations + unoptimized assembly and asks the
- * model to propose a register-allocation-style optimization pass.
- */
-app.post('/api/ai/optimize', async (req, res) => {
-  const { declarations, asm } = req.body || {};
-  if (!Array.isArray(declarations) || declarations.length === 0) {
-    return res.status(400).json({ error: 'declarations (non-empty array) is required' });
-  }
-
-  const declSummary = declarations.map((d) => `${d.type} ${d.name} = ${d.val}`).join('; ');
-
-  const messages = [
-    {
-      role: 'system',
-      content:
-        'You are an AI compiler-optimization agent for a teaching tool. Given a list of ' +
-        'variable declarations and their unoptimized stack-based x86-64 assembly, propose a ' +
-        'register-allocation optimization: which variables move into which registers, and why ' +
-        "it's faster (fewer memory accesses, better pipelining). Respond as two parts separated " +
-        'by "---": first a short (max 60 words) explanation in a whimsical Hogwarts-professor ' +
-        'voice, then the optimized assembly-style pseudocode (one instruction per line, using ' +
-        'mov/lea into registers like eax/ebx/ecx/edx/rax/rbx/rcx/rdx). No markdown fences.',
-    },
-    {
-      role: 'user',
-      content: `Declarations: ${declSummary}\n\nUnoptimized assembly:\n${(asm || []).join('\n')}`,
-    },
-  ];
-
-  const result = await callAgent(messages, { temperature: 0.7, max_tokens: 400 });
-
-  if (result.ok) {
-    const [explanation, ...rest] = result.content.split('---');
-    return res.json({
-      source: 'ai',
-      explanation: explanation.trim(),
-      optimizedAsm: rest.join('---').trim(),
+  const started = Date.now();
+  try {
+    const result = compile(code);
+    result.timings = { totalMs: Date.now() - started };
+    return res.json(result);
+  } catch (err) {
+    console.error('Compiler crashed', err);
+    return res.status(500).json({
+      error: 'The compiler hit an internal error.',
+      detail: String(err && err.message ? err.message : err),
     });
   }
+}
 
-  // Graceful fallback so the app still works without a configured token.
-  const registers32 = ['eax', 'ebx', 'ecx', 'edx'];
-  const registers64 = ['rax', 'rbx', 'rcx', 'rdx'];
-  let regIndex = 0;
-  const optLines = [];
-  declarations.forEach((d) => {
-    if (['int', 'float', 'char', 'bool'].includes(d.type)) {
-      const reg = registers32[regIndex % registers32.length];
-      optLines.push(`mov ${reg}, ${d.val}  ; bound ${d.name} directly to register`);
-      regIndex++;
-    } else if (d.type === 'string') {
-      const reg = registers64[regIndex % registers64.length];
-      optLines.push(`lea ${reg}, [rel ${d.name}_str]  ; optimized string pointer reference`);
-      regIndex++;
-    }
-  });
+app.post('/api/compile', runCompile);
+// Backwards-compatible alias for the previous API shape.
+app.post('/api/pipeline/run', runCompile);
+
+/**
+ * AI — explain a diagnostic.
+ * The compiler has already decided what is wrong; the model only has
+ * to make it make sense.
+ */
+app.post('/api/ai/explain', async (req, res) => {
+  const { diagnostic, snippet } = req.body || {};
+  if (!diagnostic || !diagnostic.message) {
+    return res.status(400).json({ error: 'diagnostic is required' });
+  }
+
+  const systemPrompt =
+    'You are a compiler teaching assistant inside Lumos, a small educational compiler. ' +
+    'A deterministic compiler phase has already produced a diagnostic — you do not second-guess it. ' +
+    'Explain, in 2-4 plain sentences, what the compiler saw, why that rule exists, and the exact ' +
+    'edit that fixes it. Be concrete and friendly, never condescending. Name the underlying ' +
+    'compiler concept (type coercion, scope, liveness, const-correctness, and so on) so the ' +
+    'reader learns something. No markdown, no headings, under 90 words.';
+
+  const userPrompt = [
+    `Phase: ${diagnostic.phase}`,
+    `Severity: ${diagnostic.severity}`,
+    `Line ${diagnostic.line}: ${diagnostic.message}`,
+    diagnostic.hint ? `Compiler hint: ${diagnostic.hint}` : '',
+    snippet ? `Offending line:\n${snippet}` : '',
+  ].filter(Boolean).join('\n');
+
+  const result = await callAgent(systemPrompt, userPrompt, { temperature: 0.55, maxOutputTokens: 260 });
+
+  if (result.ok) return res.json({ source: 'ai', explanation: result.content });
 
   return res.json({
     source: 'fallback',
     reason: result.reason,
-    explanation:
-      'Placing every variable on the stack is safe, but we can do better — binding hot variables directly to CPU registers keeps the instruction pipeline full.',
-    optimizedAsm: optLines.join('\n'),
+    explanation: [
+      diagnostic.message,
+      diagnostic.hint || '',
+      `(${diagnostic.phase} phase, line ${diagnostic.line}.)`,
+    ].filter(Boolean).join(' '),
   });
 });
 
+/**
+ * AI — review the compiled program and the optimizer's own work.
+ * This runs after a successful build, so the model comments on real
+ * measured numbers rather than inventing them.
+ */
+app.post('/api/ai/review', async (req, res) => {
+  const { code, optimizationLog, optimizationStats, metrics, allocations, warnings } = req.body || {};
+  if (typeof code !== 'string') {
+    return res.status(400).json({ error: 'code (string) is required' });
+  }
+
+  const passes = (optimizationLog || []).slice(0, 25)
+    .map((l) => `${l.pass}: ${l.before}  =>  ${l.after}`).join('\n');
+  const regs = (allocations || [])
+    .map((a) => {
+      const pairs = (a.allocation || []).map((x) => `${x.name}->${x.reg}`).join(', ') || 'none';
+      const spill = a.spilled && a.spilled.length ? ` | spilled: ${a.spilled.join(', ')}` : '';
+      return `${a.fn}: ${pairs}${spill}`;
+    })
+    .join('\n');
+
+  const systemPrompt =
+    'You are the optimization reviewer for Lumos, an educational compiler. You are given a source ' +
+    'program, the exact rewrites its optimizer performed, the register allocation it chose, and ' +
+    'measured instruction counts. Write a short review in three sections separated by lines ' +
+    'containing only "---":\n' +
+    'WHAT THE OPTIMIZER DID — 2-3 sentences citing the specific passes that fired and what they bought.\n' +
+    'WHAT IT COULD NOT DO — 1-2 sentences on an optimization that was blocked, and why (unknown ' +
+    'runtime values, function calls, aliasing, loop-carried dependencies).\n' +
+    'HOW TO WRITE FASTER CODE HERE — 2-3 concrete suggestions about THIS program.\n' +
+    'Never invent numbers you were not given. Plain prose, no markdown, under 180 words total.';
+
+  const userPrompt = [
+    `Source:\n${code.slice(0, 4000)}`,
+    optimizationStats ? `\nOptimizer stats: ${JSON.stringify(optimizationStats)}` : '',
+    metrics ? `\nInstruction counts: naive ${metrics.naiveInstructions}, optimized ${metrics.optimizedInstructions} (${metrics.reduction}% fewer)` : '',
+    passes ? `\nRewrites performed:\n${passes}` : '\nRewrites performed: none',
+    regs ? `\nRegister allocation:\n${regs}` : '',
+    (warnings && warnings.length) ? `\nCompiler warnings:\n${warnings.join('\n')}` : '',
+  ].join('\n');
+
+  const result = await callAgent(systemPrompt, userPrompt, { temperature: 0.65, maxOutputTokens: 600 });
+
+  if (result.ok) {
+    const parts = result.content.split(/\n?-{3,}\n?/);
+    return res.json({
+      source: 'ai',
+      sections: {
+        did: clean(parts[0]),
+        blocked: clean(parts[1]),
+        advice: clean(parts[2]),
+      },
+    });
+  }
+
+  return res.json({
+    source: 'fallback',
+    reason: result.reason,
+    sections: fallbackReview(optimizationStats, metrics),
+  });
+});
+
+function clean(text) {
+  if (!text) return '';
+  return text
+    .replace(/^\s*(WHAT THE OPTIMIZER DID|WHAT IT COULD NOT DO|HOW TO WRITE FASTER CODE HERE)\s*[—:-]*\s*/i, '')
+    .trim();
+}
+
+function fallbackReview(stats, metrics) {
+  const s = stats || {};
+  const fired = Object.entries({
+    'constant folding': s.folded,
+    'constant propagation': s.propagated,
+    'algebraic simplification': s.simplified,
+    'strength reduction': s.strength,
+    'common subexpression elimination': s.cse,
+    'copy propagation': s.copies,
+    'dead code elimination': s.dead,
+    'branch simplification': s.branches,
+    'unreachable code removal': s.unreachable,
+  }).filter(([, n]) => n > 0).map(([name, n]) => `${name} (${n}x)`);
+
+  return {
+    did: fired.length
+      ? `The optimizer applied ${fired.join(', ')}, taking the IR from ${s.irBefore} to ${s.irAfter} instructions${metrics ? ` and the emitted assembly from ${metrics.naiveInstructions} to ${metrics.optimizedInstructions}` : ''}.`
+      : 'No rewrites fired — every value in this program depends on something the compiler cannot know until runtime.',
+    blocked:
+      'Anything downstream of a function call or a loop-carried variable stays put: there is no interprocedural analysis here, so the optimizer must assume a call can change any value it did not prove local.',
+    advice:
+      'Hoist loop-invariant expressions out of the loop yourself, prefer const for values that never change so they fold away, and keep live ranges short — a variable used across a call has to survive in a callee-saved register or on the stack.',
+  };
+}
+
+app.use((req, res) => res.status(404).json({ error: `No route ${req.method} ${req.path}` }));
+
 app.listen(PORT, () => {
-  console.log(`Department of Magical Syntax backend listening on port ${PORT}`);
-  console.log(`AI agent configured: ${Boolean(OPENAI_API_KEY)} (model: ${OPENAI_MODEL})`);
+  console.log(`Lumos backend listening on port ${PORT}`);
+  console.log(`AI reviewer: ${GEMINI_API_KEY ? `gemini / ${GEMINI_MODEL}` : 'disabled (no GEMINI_API_KEY) — deterministic fallbacks active'}`);
 });

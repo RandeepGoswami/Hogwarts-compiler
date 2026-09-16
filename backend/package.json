@@ -1,12 +1,13 @@
 {
-  "name": "hogwarts-compiler-backend",
-  "version": "1.0.0",
-  "description": "AI agent backend for the Department of Magical Syntax compiler pipeline",
+  "name": "lumos-backend",
+  "version": "3.0.0",
+  "description": "Lumos — a six-phase educational compiler with an optimizing middle-end and a Gemini-powered reviewer",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node test/compiler.test.js"
   },
   "engines": {
     "node": ">=18.0.0"

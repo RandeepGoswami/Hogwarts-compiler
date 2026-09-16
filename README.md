@@ -1,112 +1,162 @@
-# 🪄 Department of Magical Syntax
+# Lumos — the Department of Magical Syntax
 
-An interactive, Harry-Potter-themed compiler pipeline sandbox: a real
-deterministic lexer/parser/type-checker/codegen in the backend, plus an
-**AI agent** that explains type errors and suggests optimizations, live.
+A compiler built around two phases: a **static type checker** that refuses to
+guess, and a **code optimizer** that shows every rewrite it makes. Write a small
+C-like program, press Compile, and the UI walks you through it — the judgement
+trace and symbol table the checker produced, then the pass log and before/after
+intermediate code the optimizer produced. Scanning, parsing and code generation
+are there too, but they're supporting acts.
 
-## AI agent: powered by the OpenAI API
-
-The AI agent calls the OpenAI API (`https://api.openai.com/v1/chat/completions`)
-directly, authenticated with your own `OPENAI_API_KEY`. Any OpenAI
-chat-completion model works (`gpt-4o-mini` by default, or `gpt-4o`,
-`gpt-4.1`, etc. — see your account's available models at
-<https://platform.openai.com/docs/models>).
-
-## Architecture
+The UI is themed as a wizarding-school lab: the type checker is the Sorting Hat
+(it gives every value its proper type), the optimizer is the Room of Requirement
+(it keeps only the instructions the program actually needs), the target code is
+the Pensieve, and the AI reviewer is the oracle. Four house palettes — Gryffindor,
+Slytherin, Ravenclaw, Hufflepuff — swap the accent colour and persist between
+visits. The theming stops at the chrome: diagnostics, judgements and pass notes
+stay literal, because a compiler message that is being cute is a compiler message
+you cannot act on.
 
 ```
-hogwarts-compiler/
-├── backend/          Express API — deterministic pipeline + AI agent calls
-│   ├── server.js
-│   ├── package.json
-│   └── .env.example
-├── frontend/          Static Hogwarts-themed UI (no build step)
-│   └── index.html
-├── render.yaml        Render blueprint for the backend
-├── vercel.json         Vercel config for the frontend
-└── .gitignore
+lumos/
+├── backend/
+│   ├── src/
+│   │   ├── lexer.js       Phase 1 — scanner with line/column tracking
+│   │   ├── parser.js      Phase 2 — recursive descent + error recovery
+│   │   ├── semantic.js    Phase 3 — scoped symbol table + type checking
+│   │   ├── ir.js          Phase 4 — three-address code generation
+│   │   ├── optimizer.js   Phase 5 — ten passes to a fixed point
+│   │   ├── codegen.js     Phase 6 — x86-64 + linear-scan allocation
+│   │   └── compiler.js    pipeline orchestration
+│   ├── test/compiler.test.js
+│   └── server.js          Express API + Gemini calls
+├── frontend/index.html    single-file UI, no build step
+├── render.yaml            backend blueprint for Render
+└── vercel.json            static frontend config for Vercel
 ```
 
-- **Type checking & code generation** are done with real, deterministic
-  JavaScript in `backend/server.js` — this is how an actual compiler
-  works, and it's honest to keep it that way.
-- **The AI agent** (via the OpenAI API) is called for the two tasks that
-  genuinely need language understanding: explaining *why* a type error
-  happened in a friendly way, and proposing a register-allocation-style
-  optimization with a written rationale.
-- If no `OPENAI_API_KEY` is configured, both AI endpoints gracefully fall
-  back to canned responses so the app still works for a demo.
+## The language
 
-## 1. Local setup
+Lumos compiles a C-flavoured teaching language:
+
+- types `int`, `float`, `double`, `char`, `bool`, `string`, `void`, plus `const`
+- functions with parameters, calls, and recursion
+- `if` / `else`, `while`, `for`, `break`, `continue`, `return`, blocks and scopes
+- full expression precedence, unary `-` and `!`, `++` / `--` (prefix and postfix),
+  compound assignment (`+=`, `-=`, `*=`, `/=`, `%=`), short-circuit `&&` and `||`
+- multi-declarator lines (`int a = 1, b = 2;`), string and char literals, `print(...)`
+
+## What each phase does
+
+**1. Scan.** Characters become tokens with positions. Comments (`//`, `/* */`)
+and preprocessor lines are stripped; unterminated strings, bad numbers and stray
+characters are reported rather than silently dropped.
+
+**2. Parse.** Recursive descent with precedence climbing builds an AST. On a
+syntax error the parser panics to the next statement boundary and keeps going,
+so one missing semicolon doesn't hide every other mistake in the file.
+
+**3. Type check (primary).** A scope chain resolves every name and annotates every expression
+with a type. This phase reports undeclared identifiers, redeclarations, shadowing,
+`const` violations, narrowing conversions, non-boolean conditions, bad operand
+types, wrong argument counts and types, missing returns, `break` outside a loop,
+unreachable code, unused variables, reads before assignment, and division by a
+constant zero. Every judgement it makes — declaration types, implicit widening,
+narrowing, arithmetic promotion, comparison results, argument binding, return
+types — is recorded in order and surfaced as a readable trace, so you can see
+*why* a program was accepted, not just that it was.
+
+**4. Lower.** The AST becomes three-address code. Control flow turns into labels
+and conditional jumps; `&&` and `||` lower to real short-circuit branches;
+expressions become chains of temporaries.
+
+**5. Optimize (primary).** Ten passes run repeatedly until the IR stops changing, because
+each one exposes work for the others:
+
+| Pass | Example |
+|---|---|
+| Constant folding | `2 + 3 * 4` → `14` |
+| Constant propagation | `x = 5; y = x + 1` → `y = 6` |
+| Algebraic simplification | `x * 1`, `x + 0`, `x - x` |
+| Strength reduction | `x * 8` → `x << 3` |
+| Common subexpression elimination | reuse an identical earlier result |
+| Copy propagation | `t1 = x; y = t1` → `y = x` |
+| Dead code elimination | drop values nothing reads |
+| Branch simplification | `ifFalse false goto L` → unconditional |
+| Unreachable code removal | delete instructions no path reaches |
+| Label cleanup | drop labels nothing jumps to |
+
+Every rewrite is logged with its before, its after, and why it's valid — that
+log is what the UI and the AI reviewer both read.
+
+**6. Emit.** Two builds are generated. The naive one gives every value a stack
+slot; the optimized one computes live ranges, runs linear-scan allocation over
+the callee-saved registers, spills the longest-lived value when it runs out, and
+reports the instruction-count delta between the two.
+
+## The AI layer
+
+The compiler is deterministic. The model is only asked to do the two things a
+language model is genuinely better at:
+
+- `POST /api/ai/explain` — takes a diagnostic the compiler already produced and
+  explains it in plain language, naming the underlying concept and the exact fix.
+- `POST /api/ai/review` — reads the pass log, the register allocation and the
+  measured instruction counts, then explains what the optimizer managed, what it
+  was blocked from doing, and how to write this program so it compiles better.
+
+Without a `GEMINI_API_KEY` both endpoints fall back to deterministic answers
+built from the compiler's own output, so nothing in the UI breaks.
+
+## API
+
+| Route | Purpose |
+|---|---|
+| `GET /api/health` | backend status, whether the AI key is configured |
+| `POST /api/compile` | `{ code }` → phases, diagnostics, tokens, AST, symbols, type-check trace, IR, optimized IR, pass log, assembly, metrics |
+| `POST /api/pipeline/run` | alias of `/api/compile` for the previous API shape |
+| `POST /api/ai/explain` | `{ diagnostic, snippet }` → explanation |
+| `POST /api/ai/review` | build artifacts → three-part review |
+
+## Run it locally
 
 ```bash
-git clone <your-repo-url>
-cd hogwarts-compiler/backend
+cd backend
 npm install
-cp .env.example .env
-# edit .env and paste in your OpenAI API key
-npm start
+cp .env.example .env        # optional: paste a Gemini key
+npm start                   # http://localhost:4000
+npm test                    # 22 compiler tests, no dependencies needed
 ```
 
-Then just open `frontend/index.html` directly in a browser (or serve it
-with any static server) — it talks to `http://localhost:4000` by default.
+Then open `frontend/index.html` in a browser, or serve the folder with any
+static server. It talks to `http://localhost:4000` by default.
 
-### Getting an OpenAI API key
+## Deploy
 
-1. Go to <https://platform.openai.com/api-keys> and create a new secret key.
-2. Copy the key into `backend/.env` as `OPENAI_API_KEY`.
-3. Pick a model from <https://platform.openai.com/docs/models> and set
-   `OPENAI_MODEL` accordingly (default: `gpt-4o-mini`).
-4. Make sure your OpenAI account/project has billing set up — the Chat
-   Completions API is a paid endpoint (no free tier), and requests will
-   fail with an `api_error` in the health check / fallback responses if
-   the key is invalid or has no credit.
+**Backend on Render.** Push to GitHub, then New → Blueprint and point it at the
+repo. `render.yaml` creates the `lumos-backend` service with root directory
+`backend`. Set `GEMINI_API_KEY` in the dashboard (it's marked `sync: false`, so
+Render prompts for it and you never commit a key).
 
-## 2. Deploy the backend to Render
+**Frontend on Vercel.** Add New → Project against the same repo; `vercel.json`
+serves `frontend/` as static output with no build step. Point it at your backend
+by adding one line above the main script in `index.html`:
 
-1. Push this repo to GitHub.
-2. In Render, choose **New → Blueprint**, point it at your repo — it will
-   read `render.yaml` automatically and create the `hogwarts-compiler-backend`
-   web service (root directory `backend`).
-3. In the Render dashboard, set the `OPENAI_API_KEY` environment variable
-   (marked `sync: false` in the blueprint, so Render will prompt you for
-   it — never commit real keys).
-4. Deploy. Note the resulting URL, e.g.
-   `https://hogwarts-compiler-backend.onrender.com`.
+```html
+<script>window.LUMOS_API_BASE = 'https://lumos-backend.onrender.com';</script>
+```
 
-## 3. Deploy the frontend to Vercel
-
-1. In Vercel, **Add New → Project**, import the same repo.
-2. Vercel will pick up `vercel.json`, which serves the `frontend/`
-   directory as static output — no build step needed.
-3. Before or after deploying, open `frontend/index.html` and set the API
-   base to your live Render URL, either by editing this line directly:
-   ```js
-   const API_BASE = window.HOGWARTS_API_BASE || 'http://localhost:4000';
-   ```
-   or (recommended, so you don't hardcode it) by adding a tiny inline
-   script above it in `index.html`:
-   ```html
-   <script>window.HOGWARTS_API_BASE = 'https://hogwarts-compiler-backend.onrender.com';</script>
-   ```
-4. Deploy. Vercel gives you a URL like
-   `https://hogwarts-compiler.vercel.app`.
-
-## 4. CORS
-
-The backend already has `cors()` enabled for all origins, so the Vercel
-frontend can call the Render backend cross-origin without extra config.
-If you want to lock it down for the final submission, restrict it in
-`server.js`:
+CORS is open on the backend. To lock it down for submission:
 
 ```js
-app.use(cors({ origin: 'https://hogwarts-compiler.vercel.app' }));
+app.use(cors({ origin: 'https://your-frontend.vercel.app' }));
 ```
 
 ## Extending it
 
-- Add more type-error categories to `typeCheck()` in `server.js`.
-- Have the AI agent also review whole-function control flow, not just
-  single declarations.
-- Swap `gpt-4o-mini` for a larger model (e.g. `gpt-4o`) if you want richer
-  optimization commentary (trade-off: slower, more expensive per call).
+- Arrays and pointers: the parser already has postfix hooks for `[` and `]`.
+- Loop-invariant code motion and induction-variable strength reduction — the IR
+  has the labels and jumps you'd need to identify loop bodies.
+- A real control-flow graph would let the optimizer keep facts across joins
+  instead of forgetting everything at each label.
+- Interprocedural constant propagation, so calls to pure functions with literal
+  arguments fold like any other constant.

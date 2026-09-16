@@ -1,378 +1,1259 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Department of Magical Syntax (AI Code Gen)</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --parchment: #e2cca6;
-            --parchment-dark: #b8996b;
-            --parchment-light: #f5eedf;
-            --ink: #1f140c;
-            --gryffindor-red: #740001;
-            --gryffindor-gold: #d3a625;
-            --slytherin-green: #1a472a;
-            --ravenclaw-blue: #0e1a40;
-            --magic-glow: rgba(211, 166, 37, 0.6);
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lumos — the Sorting Hat and the Room of Requirement</title>
+<meta name="description" content="A teaching compiler in the Department of Magical Syntax: a static type checker that sorts every value, and an optimizer that keeps only what is required.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --night:  #0B0A12;
+    --panel:  #13111E;
+    --raised: #1B1828;
+    --sunken: #07060D;
 
-        body {
-            margin: 0;
-            padding: 20px;
-            box-sizing: border-box;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-family: 'Playfair Display', serif;
-            color: var(--ink);
-            background: linear-gradient(to bottom, #0a1128 0%, #1c2b59 60%, #000000 100%);
-            overflow-x: hidden;
-            position: relative;
-        }
+    /* House theme — swapped on body[data-house] */
+    --accent:      #D3A625;
+    --accent-soft: #F0D27A;
+    --accent-deep: #7F0909;
+    --accent-line: rgba(211,166,37,0.30);
+    --accent-wash: rgba(211,166,37,0.07);
+    --glow:        rgba(211,166,37,0.32);
 
-        .stars {
-            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            background-image:
-                radial-gradient(2px 2px at 20px 30px, #ffffff, rgba(0,0,0,0)),
-                radial-gradient(2px 2px at 40px 70px, #ffffff, rgba(0,0,0,0)),
-                radial-gradient(2px 2px at 90px 140px, #ffffff, rgba(0,0,0,0)),
-                radial-gradient(2px 2px at 160px 90px, #ffffff, rgba(0,0,0,0));
-            background-repeat: repeat; background-size: 200px 200px;
-            z-index: -3; opacity: 0.5; animation: twinkle 5s infinite alternate;
-        }
+    --parch: #F1E9DA;
+    --ash:   #A79C8C;
+    --dust:  #6E6556;
+    --rule:  rgba(241,233,218,0.09);
 
-        @keyframes twinkle { 0% { opacity: 0.3; } 100% { opacity: 0.7; } }
+    --pass:  #5FBE86;
+    --warn:  #E0A93C;
+    --fail:  #D2484F;
 
-        .castle-bg {
-            position: absolute; bottom: 0; left: 0; width: 100%; height: 300px;
-            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 300" preserveAspectRatio="none"><path d="M100,300 L100,200 L120,180 L120,140 L140,100 L160,140 L160,180 L180,200 L180,300 Z M250,300 L250,150 L270,120 L300,50 L330,120 L350,150 L350,300 Z M400,300 L400,220 L420,200 L420,160 L450,100 L480,160 L480,200 L500,220 L500,300 Z M550,300 L550,180 L580,140 L600,60 L620,140 L650,180 L650,300 Z M750,300 L750,230 L770,210 L770,150 L800,80 L830,150 L830,210 L850,230 L850,300 Z" fill="%230b1021"/></svg>') no-repeat bottom center;
-            background-size: cover; z-index: -2; opacity: 0.9;
-        }
+    --display: 'Cinzel Decorative', Georgia, serif;
+    --title:   'Cinzel', Georgia, serif;
+    --body:    'EB Garamond', Georgia, serif;
+    --mono:    'JetBrains Mono', ui-monospace, Menlo, monospace;
+  }
 
-        .flyer {
-            position: absolute; width: 40px; height: 20px;
-            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 20"><path d="M10,15 L45,15 L45,13 L10,13 Z M25,13 L30,5 L20,5 Z M35,13 C35,10 40,8 45,8 C40,11 40,13 35,13 Z" fill="%23000"/></svg>') no-repeat;
-            opacity: 0.6; z-index: -1;
-        }
+  body[data-house="slytherin"] {
+    --accent: #2FA265; --accent-soft: #7FDCA9; --accent-deep: #1A472A;
+    --accent-line: rgba(47,162,101,0.32); --accent-wash: rgba(47,162,101,0.07);
+    --glow: rgba(47,162,101,0.32);
+  }
+  body[data-house="ravenclaw"] {
+    --accent: #5B8DEF; --accent-soft: #A6C2FF; --accent-deep: #0E1A40;
+    --accent-line: rgba(91,141,239,0.32); --accent-wash: rgba(91,141,239,0.07);
+    --glow: rgba(91,141,239,0.32);
+  }
+  body[data-house="hufflepuff"] {
+    --accent: #E8B923; --accent-soft: #F8DC7E; --accent-deep: #372E29;
+    --accent-line: rgba(232,185,35,0.32); --accent-wash: rgba(232,185,35,0.07);
+    --glow: rgba(232,185,35,0.32);
+  }
 
-        .flyer1 { top: 15%; animation: flyRight 18s linear infinite; }
-        .flyer2 { top: 25%; left: -50px; animation: flyRight 25s linear infinite 7s; }
-        .flyer3 { top: 10%; right: -50px; transform: scaleX(-1); animation: flyLeft 22s linear infinite 3s; }
+  * { box-sizing: border-box; }
 
-        @keyframes flyRight {
-            0% { left: -100px; transform: translateY(0) rotate(5deg); }
-            50% { transform: translateY(-20px) rotate(0deg); }
-            100% { left: 110vw; transform: translateY(10px) rotate(-5deg); }
-        }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(70% 45% at 8% -5%, var(--accent-wash), transparent 60%),
+      var(--night);
+    color: var(--parch);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
 
-        @keyframes flyLeft {
-            0% { right: -100px; transform: scaleX(-1) translateY(0) rotate(5deg); }
-            50% { transform: scaleX(-1) translateY(15px) rotate(0deg); }
-            100% { right: 110vw; transform: scaleX(-1) translateY(-10px) rotate(-5deg); }
-        }
+  ::selection { background: var(--accent-line); }
+  :focus-visible { outline: 2px solid var(--accent-soft); outline-offset: 2px; }
 
-        .parchment {
-            background-color: var(--parchment);
-            background-image:
-                linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%),
-                radial-gradient(circle, transparent 70%, var(--parchment-dark) 150%);
-            width: 100%; max-width: 900px; border-radius: 4px;
-            box-shadow: inset 0 0 40px rgba(139, 69, 19, 0.4), inset 0 0 10px rgba(0,0,0,0.5), 0 20px 50px rgba(0,0,0,0.8), 0 0 100px rgba(255, 255, 255, 0.1);
-            padding: 40px; position: relative; z-index: 10;
-        }
+  .label {
+    font-family: var(--title);
+    font-weight: 600;
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--dust);
+  }
 
-        .parchment::after {
-            content: 'C++'; position: absolute; bottom: 30px; right: 40px;
-            width: 65px; height: 65px; background: #8b0000; border-radius: 50%;
-            color: #d3a625; font-family: 'Cinzel Decorative', serif; font-size: 28px;
-            line-height: 65px; text-align: center;
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.7), 2px 4px 6px rgba(0,0,0,0.5);
-            border: 2px solid #5a0000; transform: rotate(-15deg); opacity: 0.8; pointer-events: none;
-        }
+  .frame { display: grid; grid-template-columns: 330px minmax(0, 1fr); min-height: 100vh; }
 
-        h1 {
-            font-family: 'Cinzel Decorative', cursive; text-align: center;
-            color: var(--gryffindor-red); font-size: 2.2rem; margin-top: 0;
-            text-shadow: 1px 1px 0px var(--parchment-light), 2px 2px 2px rgba(0,0,0,0.3);
-            border-bottom: 2px solid var(--parchment-dark); padding-bottom: 15px; margin-bottom: 15px;
-        }
+  /* ===================== sidebar ===================== */
+  .rail {
+    border-right: 1px solid var(--rule);
+    padding: 30px 26px 46px;
+    background: linear-gradient(180deg, var(--accent-wash), transparent 28%);
+    position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand svg { flex-shrink: 0; filter: drop-shadow(0 0 9px var(--glow)); }
+  .brand .name {
+    font-family: var(--display); font-weight: 900; font-size: 1.5rem;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    text-shadow: 0 0 20px var(--glow);
+  }
+  .rail .intro { color: var(--ash); font-size: 0.97rem; margin: 15px 0 26px; }
+  .rail hr { border: 0; border-top: 1px solid var(--rule); margin: 24px 0; }
+  .rail h3 { margin: 0 0 11px; }
 
-        .dashboard {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 20px; font-weight: bold; font-size: 1.1rem; color: var(--ravenclaw-blue);
-        }
+  .houses { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .houses button {
+    font-family: var(--title); font-weight: 600; font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    color: var(--ash); background: var(--panel);
+    border: 1px solid var(--rule); border-radius: 2px;
+    padding: 9px 6px; cursor: pointer; transition: all .18s;
+  }
+  .houses button:hover { color: var(--parch); border-color: var(--accent-line); }
+  .houses button[aria-pressed="true"] {
+    color: var(--night); border-color: transparent;
+    background: linear-gradient(140deg, var(--accent-soft), var(--accent));
+    box-shadow: 0 0 16px var(--glow);
+  }
 
-        .phase-indicator {
-            font-family: 'Cinzel Decorative', cursive; font-size: 1.4rem; color: var(--slytherin-green);
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.2); transition: color 0.3s;
-        }
+  select.picker {
+    width: 100%; appearance: none; cursor: pointer;
+    background-color: var(--panel);
+    border: 1px solid var(--rule); color: var(--parch);
+    font-family: var(--body); font-size: 0.97rem;
+    padding: 11px 13px; border-radius: 2px;
+    background-image: linear-gradient(45deg, transparent 50%, var(--ash) 50%), linear-gradient(135deg, var(--ash) 50%, transparent 50%);
+    background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+    background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+  }
+  select.picker:hover { border-color: var(--accent-line); }
 
-        .ai-status {
-            font-size: 0.85rem; font-style: italic; color: var(--ravenclaw-blue); opacity: 0.8;
-        }
+  .readout {
+    border: 1px solid var(--accent-line); background: var(--accent-wash);
+    border-radius: 2px; padding: 14px 15px; margin-bottom: 14px;
+  }
+  .readout .top { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+  .readout .nm { font-family: var(--title); font-weight: 700; font-size: 0.95rem; letter-spacing: 0.04em; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dust); flex-shrink: 0; }
+  .dot.live { background: var(--accent); box-shadow: 0 0 9px var(--accent); }
+  .dot.pass { background: var(--pass); box-shadow: 0 0 9px var(--pass); }
+  .dot.warn { background: var(--warn); box-shadow: 0 0 9px var(--warn); }
+  .dot.fail { background: var(--fail); box-shadow: 0 0 9px var(--fail); }
+  .readout .blurb { font-family: var(--mono); font-size: 0.71rem; color: var(--ash); line-height: 1.6; }
 
-        .instructions {
-            font-style: italic; text-align: center; margin-bottom: 20px; color: #4a3623;
-            background: rgba(255,255,255,0.2); padding: 10px; border-radius: 5px; border-left: 4px solid var(--gryffindor-gold);
-        }
+  .typelist { display: flex; flex-wrap: wrap; gap: 5px; }
+  .typelist span {
+    font-family: var(--mono); font-size: 0.7rem; color: var(--ash);
+    border: 1px solid var(--rule); border-radius: 2px; padding: 2px 7px;
+  }
 
-        textarea {
-            width: 100%; height: 260px; background: rgba(255, 255, 255, 0.4);
-            border: 2px solid var(--parchment-dark); border-radius: 2px;
-            font-family: 'Fira Code', monospace; font-size: 1rem; color: #111;
-            padding: 15px; box-sizing: border-box; resize: none; outline: none;
-            box-shadow: inset 0 2px 5px rgba(0,0,0,0.1); transition: all 0.3s ease; margin-bottom: 20px;
-        }
+  /* ===================== main ===================== */
+  main { padding: 34px 40px 80px; max-width: 1280px; }
 
-        textarea:focus {
-            background: rgba(255, 255, 255, 0.6); border-color: var(--gryffindor-gold);
-            box-shadow: inset 0 2px 5px rgba(0,0,0,0.1), 0 0 15px var(--magic-glow);
-        }
+  .hero {
+    border: 1px solid var(--accent-line);
+    background:
+      radial-gradient(65% 130% at 0% 0%, var(--accent-wash), transparent 70%),
+      var(--panel);
+    padding: 34px 38px 38px;
+    position: relative; overflow: hidden;
+  }
+  .hero::after {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(90% 60% at 100% 120%, rgba(127,9,9,0.10), transparent 70%);
+    pointer-events: none;
+  }
+  .hero .eyebrow {
+    display: flex; align-items: center; gap: 10px;
+    color: var(--accent); margin-bottom: 16px;
+    font-family: var(--title); font-weight: 600;
+    font-size: 0.74rem; letter-spacing: 0.22em; text-transform: uppercase;
+  }
+  .hero h1 {
+    font-family: var(--display); font-weight: 900;
+    font-size: clamp(1.9rem, 4.6vw, 3.5rem);
+    line-height: 1.04; letter-spacing: 0.01em; text-transform: uppercase;
+    margin: 0 0 18px; color: #FFF7E8;
+    text-shadow: 0 0 30px rgba(255,247,232,0.20), 0 0 70px var(--glow);
+  }
+  .hero p { color: var(--ash); font-size: 1.02rem; margin: 0; max-width: 62ch; position: relative; }
 
-        .controls { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; }
+  .flow { display: grid; grid-template-columns: repeat(6, 1fr); gap: 26px; margin: 30px 0 42px; }
+  .stage {
+    border: 1px solid var(--rule); background: var(--panel);
+    padding: 15px 10px; text-align: center; position: relative;
+    transition: border-color .25s, box-shadow .25s, background .25s;
+  }
+  .stage::after {
+    content: '\276F'; position: absolute; right: -18px; top: 50%; transform: translateY(-50%);
+    color: var(--dust); font-size: 0.8rem;
+  }
+  .stage:last-child::after { display: none; }
+  .stage .t {
+    font-family: var(--title); font-weight: 700; font-size: 0.78rem;
+    letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .stage .s { font-family: var(--mono); font-size: 0.6rem; color: var(--dust); margin-top: 5px; }
+  .stage.focus { border-color: var(--accent-line); background: var(--accent-wash); }
+  .stage.focus .t { color: var(--accent-soft); }
+  .stage.ok { border-color: rgba(95,190,134,.42); }
+  .stage.ok .t { color: var(--pass); }
+  .stage.warn { border-color: rgba(224,169,60,.45); }
+  .stage.warn .t { color: var(--warn); }
+  .stage.error { border-color: var(--fail); background: rgba(210,72,79,.12); box-shadow: 0 0 22px rgba(210,72,79,.25); }
+  .stage.error .t { color: var(--fail); }
+  .stage.skipped { opacity: .34; }
+  .stage.running { border-color: var(--accent); box-shadow: 0 0 22px var(--glow); }
 
-        button {
-            font-family: 'Cinzel Decorative', cursive; background: var(--gryffindor-red); color: var(--parchment-light);
-            border: 2px solid var(--gryffindor-gold); padding: 10px 20px; font-size: 1.1rem; cursor: pointer;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.3); transition: all 0.2s ease;
-        }
+  /* sections */
+  .sec { margin-bottom: 46px; }
+  .sec-head {
+    display: flex; align-items: baseline; gap: 13px;
+    border-bottom: 1px solid var(--rule); padding-bottom: 9px; margin-bottom: 18px;
+  }
+  .sec-head .n { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.2em; color: var(--accent); }
+  .sec-head h2 {
+    font-family: var(--title); font-weight: 700; font-size: 0.92rem;
+    letter-spacing: 0.2em; text-transform: uppercase; margin: 0;
+  }
+  .sec-head .tail { margin-left: auto; font-family: var(--mono); font-size: 0.68rem; color: var(--dust); }
+  .sec > .lede { color: var(--ash); font-size: 0.98rem; margin: 0 0 18px; max-width: 72ch; }
+  .sec > .lede code { font-family: var(--mono); font-size: 0.82rem; color: var(--accent-soft); }
 
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* editor */
+  .work { display: grid; grid-template-columns: minmax(0,1fr) 292px; gap: 26px; align-items: start; }
+  .editor { display: flex; background: var(--sunken); border: 1px solid var(--rule); min-height: 330px; max-height: 60vh; }
+  .gutter {
+    padding: 15px 0 15px 13px; width: 54px; text-align: right;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.62;
+    color: var(--dust); user-select: none; overflow: hidden; flex-shrink: 0;
+  }
+  .gutter div { position: relative; padding-right: 15px; }
+  .gutter div .m { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 5px; height: 5px; border-radius: 50%; }
+  .gutter div.err { color: var(--fail); } .gutter div.err .m { background: var(--fail); }
+  .gutter div.wrn { color: var(--warn); } .gutter div.wrn .m { background: var(--warn); }
+  .gutter div.here { color: var(--parch); }
+  #src {
+    flex: 1; border: 0; outline: 0; resize: none; background: transparent;
+    color: var(--parch); font-family: var(--mono); font-size: 12.5px; line-height: 1.62;
+    padding: 15px 16px 15px 4px; caret-color: var(--accent); tab-size: 2; overflow-y: auto;
+  }
 
-        button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.4), 0 0 15px var(--gryffindor-gold); }
+  .aside h3 { font-family: var(--display); font-weight: 700; font-size: 1.32rem; margin: 0 0 9px; line-height: 1.2; }
+  .aside p { color: var(--ash); font-size: 0.93rem; margin: 0 0 18px; }
+  .go {
+    width: 100%; font-family: var(--title); font-weight: 700; font-size: 0.86rem;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: #1A1405; background: linear-gradient(140deg, var(--accent-soft), var(--accent));
+    border: 0; padding: 13px; cursor: pointer; border-radius: 2px;
+    box-shadow: 0 0 26px var(--glow); transition: box-shadow .15s, transform .12s;
+  }
+  .go:hover:not(:disabled) { box-shadow: 0 0 38px var(--glow); transform: translateY(-1px); }
+  .go:disabled { opacity: .55; cursor: progress; transform: none; }
+  .kbd { display: block; text-align: center; margin-top: 9px; font-family: var(--mono); font-size: 0.66rem; color: var(--dust); }
+  .aside .status { margin-top: 16px; font-family: var(--mono); font-size: 0.71rem; color: var(--ash); }
 
-        #ai-btn { background: var(--ravenclaw-blue); display: none; border-color: #4a6fa5; animation: pulse 1.5s infinite; }
+  /* diagnostics */
+  .diag {
+    display: grid; grid-template-columns: 62px 1fr; gap: 14px;
+    border-left: 2px solid var(--rule); padding: 11px 14px; margin-bottom: 8px;
+    background: var(--panel); cursor: pointer;
+  }
+  .diag.error { border-left-color: var(--fail); }
+  .diag.warning { border-left-color: var(--warn); }
+  .diag:hover { background: var(--raised); }
+  .diag .loc { font-family: var(--mono); font-size: 0.7rem; color: var(--dust); }
+  .diag.error .loc { color: var(--fail); }
+  .diag.warning .loc { color: var(--warn); }
+  .diag .msg { font-size: 0.97rem; }
+  .diag .hint { font-size: 0.92rem; color: var(--ash); margin-top: 3px; }
+  .diag .tag { font-family: var(--mono); font-size: 0.62rem; color: var(--dust); margin-left: 9px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .ask {
+    margin-top: 9px; font-family: var(--title); font-weight: 600; font-size: 0.72rem;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--accent-soft); background: none; border: 1px solid var(--accent-line);
+    padding: 5px 12px; cursor: pointer; border-radius: 2px;
+  }
+  .ask:hover { background: var(--accent-wash); }
+  .said {
+    margin-top: 10px; padding: 12px 15px;
+    border-left: 2px solid var(--accent); background: var(--accent-wash);
+    font-size: 0.97rem; font-style: italic; color: #F3E7CE;
+  }
+  .said .by { display: block; margin-top: 7px; font-family: var(--mono); font-size: 0.63rem; font-style: normal; color: var(--dust); }
 
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(14, 26, 64, 0.7); }
-            70% { box-shadow: 0 0 0 15px rgba(14, 26, 64, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(14, 26, 64, 0); }
-        }
+  .none { color: var(--dust); font-size: 0.95rem; font-style: italic; padding: 14px 0; max-width: 70ch; }
 
-        .pensieve-wrapper { position: relative; }
-        .pensieve-wrapper::before {
-            content: 'The Pensieve (Compiler Output)'; position: absolute; top: -12px; left: 20px;
-            background: var(--parchment); padding: 0 10px; font-style: italic; font-weight: bold; color: var(--ink); z-index: 1;
-        }
+  /* stat strip */
+  .strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); border: 1px solid var(--rule); margin-bottom: 20px; }
+  .strip > div { padding: 13px 16px; border-right: 1px solid var(--rule); background: var(--panel); }
+  .strip > div:last-child { border-right: 0; }
+  .strip .v { font-family: var(--display); font-weight: 700; font-size: 1.55rem; line-height: 1.15; }
+  .strip .v.good { color: var(--pass); }
+  .strip .v.bad { color: var(--fail); }
+  .strip .k { font-family: var(--title); font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dust); margin-top: 4px; }
 
-        #console {
-            background-color: #050a0f; background-image: radial-gradient(circle at center, #0c1622 0%, #03060a 100%);
-            border: 3px solid #2c3e50; border-radius: 4px; height: 260px; overflow-y: auto;
-            padding: 25px 15px 15px 15px; font-family: 'Fira Code', monospace; font-size: 0.95rem;
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.8); color: #ecf0f1;
-        }
+  .panes { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .pane-title {
+    font-family: var(--title); font-weight: 600; font-size: 0.72rem;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--dust); margin-bottom: 10px;
+  }
 
-        .log-entry { margin-bottom: 8px; line-height: 1.4; animation: fadeIn 0.3s ease-out forwards; opacity: 0; }
-        .log-phase { color: #f39c12; font-weight: bold; margin-top: 10px; padding-bottom: 3px; border-bottom: 1px solid #34495e;}
-        .log-success { color: #2ecc71; }
-        .log-error { color: #e74c3c; font-weight: bold; background: rgba(231, 76, 60, 0.1); padding: 2px 5px;}
-        .log-ai { color: #3498db; font-style: italic; border-left: 3px solid #3498db; padding-left: 10px; margin: 10px 0; background: rgba(52, 152, 219, 0.1); padding: 10px;}
-        .log-asm { color: #bdc3c7; font-family: 'Fira Code', monospace; padding-left: 15px; border-left: 2px solid #7f8c8d; margin: 5px 0;}
-        .log-optasm { color: #e67e22; font-family: 'Fira Code', monospace; padding-left: 15px; border-left: 2px solid #d35400; margin: 5px 0;}
-        .log-normal { color: #ecf0f1; }
+  table.grid { width: 100%; border-collapse: collapse; }
+  table.grid th {
+    text-align: left; font-family: var(--title); font-weight: 600;
+    font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--dust); padding: 7px 10px; border-bottom: 1px solid var(--rule);
+  }
+  table.grid td {
+    font-family: var(--mono); font-size: 11.5px; color: var(--ash);
+    padding: 7px 10px; border-bottom: 1px solid var(--rule);
+  }
+  table.grid td.k { color: var(--parch); }
+  table.grid td.rule { color: var(--accent-soft); }
+  table.grid tr:hover td { background: var(--panel); }
+  .const { color: var(--warn); }
 
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  .scroller { max-height: 360px; overflow-y: auto; border: 1px solid var(--rule); }
 
-        #console::-webkit-scrollbar { width: 8px; }
-        #console::-webkit-scrollbar-track { background: #060a0d; }
-        #console::-webkit-scrollbar-thumb { background: #2c3e50; border-radius: 4px; }
-    </style>
+  .judge { display: grid; grid-template-columns: 44px 152px 1fr; gap: 10px; padding: 6px 12px; border-bottom: 1px solid var(--rule); font-family: var(--mono); font-size: 11.5px; }
+  .judge .ln { color: var(--dust); }
+  .judge .rl { color: var(--accent-soft); }
+  .judge .dt { color: var(--ash); }
+  .judge.narrow { background: rgba(224,169,60,.06); }
+  .judge.narrow .rl { color: var(--warn); }
+
+  /* optimizer */
+  .passbar { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 20px; }
+  .passchip {
+    font-family: var(--mono); font-size: 0.68rem;
+    border: 1px solid var(--accent-line); color: var(--accent-soft);
+    background: var(--accent-wash); padding: 4px 10px; border-radius: 2px;
+  }
+  .passchip.off { border-color: var(--rule); color: var(--dust); background: none; }
+  .passchip b { color: var(--parch); margin-left: 5px; }
+
+  .rw {
+    display: grid; grid-template-columns: 1fr 22px 1fr; gap: 10px; align-items: center;
+    border: 1px solid var(--rule); background: var(--panel);
+    padding: 9px 13px; margin-bottom: 6px; font-family: var(--mono); font-size: 11.5px;
+  }
+  .rw .b { color: var(--dust); text-decoration: line-through; }
+  .rw .ar { color: var(--accent); text-align: center; }
+  .rw .a { color: var(--pass); }
+  .rw .a.del { color: var(--dust); font-style: italic; }
+  .rw .why { grid-column: 1 / -1; font-family: var(--body); font-size: 0.92rem; color: var(--ash); }
+  .grp { margin-bottom: 22px; }
+  .grp .gh { display: flex; align-items: baseline; gap: 10px; margin-bottom: 9px; }
+  .grp .gh .gn { font-family: var(--title); font-weight: 700; font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; }
+  .grp .gh .gc { font-family: var(--mono); font-size: 0.68rem; color: var(--accent-soft); }
+
+  .ir { font-family: var(--mono); font-size: 11.5px; line-height: 1.75; }
+  .ir div { padding: 0 9px; white-space: pre; overflow-x: auto; }
+  .ir div.lbl { color: var(--accent-soft); }
+  .ir div.gone { color: var(--dust); text-decoration: line-through; opacity: .65; }
+  .ir div.new { color: var(--pass); background: rgba(95,190,134,.07); }
+  .fnhead { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin: 0 0 9px; }
+  .fnblock { margin-bottom: 26px; }
+
+  .seg { display: inline-flex; border: 1px solid var(--rule); margin-bottom: 14px; }
+  .seg button {
+    font-family: var(--title); font-weight: 600; font-size: 0.72rem;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--dust); background: none; border: 0; padding: 8px 15px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent-soft); }
+  pre.asm {
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.7;
+    background: var(--sunken); border: 1px solid var(--rule);
+    padding: 14px 16px; overflow-x: auto; margin: 0; color: #CFC4AE;
+    max-height: 460px; overflow-y: auto;
+  }
+
+  .range { display: grid; grid-template-columns: 86px 1fr; gap: 11px; align-items: center; margin-bottom: 5px; }
+  .range .nm { font-family: var(--mono); font-size: 11px; color: var(--ash); text-align: right; }
+  .track { position: relative; height: 15px; background: var(--sunken); border: 1px solid var(--rule); }
+  .bar {
+    position: absolute; top: 2px; bottom: 2px; display: flex; align-items: center;
+    padding: 0 5px; font-family: var(--mono); font-size: 9px; color: #13111E; overflow: hidden; white-space: nowrap;
+  }
+  .bar.spilled {
+    background: repeating-linear-gradient(135deg, rgba(210,72,79,.45) 0 4px, transparent 4px 8px);
+    border: 1px dashed rgba(210,72,79,.6); color: var(--fail);
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: 13px; margin-bottom: 15px; font-family: var(--mono); font-size: 10.5px; color: var(--ash); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; display: inline-block; }
+
+  .toks { display: flex; flex-wrap: wrap; gap: 4px; }
+  .tk { font-family: var(--mono); font-size: 11px; border: 1px solid var(--rule); padding: 2px 7px; color: var(--ash); background: var(--panel); }
+  .tk[data-t="keyword"] { color: var(--accent-soft); border-color: var(--accent-line); }
+  .tk[data-t="number"] { color: var(--pass); }
+  .tk[data-t="string"], .tk[data-t="char"] { color: var(--warn); }
+  .tk[data-t="identifier"] { color: var(--parch); }
+
+  .tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+  .tree ul { margin-left: 13px; border-left: 1px solid var(--rule); padding-left: 12px; }
+  .tree .row { display: inline-flex; gap: 8px; align-items: baseline; font-family: var(--mono); font-size: 11.5px; padding: 1px 5px; }
+  .tree .row:hover { background: var(--panel); }
+  .tree .lb { color: var(--parch); }
+  .tree .kd { font-size: 10px; color: var(--dust); }
+  .tree .ty { font-size: 10px; color: var(--pass); border: 1px solid rgba(95,190,134,.28); padding: 0 4px; }
+  .tree .tg { background: none; border: 0; color: var(--dust); cursor: pointer; font-family: var(--mono); font-size: 10px; padding: 0 3px; }
+  .tree li.shut > ul { display: none; }
+
+  details.more { border: 1px solid var(--rule); background: var(--panel); margin-top: 14px; }
+  details.more > summary {
+    font-family: var(--title); font-weight: 600; font-size: 0.74rem;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ash); padding: 12px 16px; cursor: pointer; list-style: none;
+  }
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more > summary::before { content: '+ '; color: var(--accent); }
+  details.more[open] > summary::before { content: '\2212 '; }
+  details.more > .inner { padding: 4px 16px 18px; border-top: 1px solid var(--rule); }
+
+  .review { border: 1px solid var(--accent-line); background: var(--accent-wash); padding: 18px 20px; margin-top: 16px; }
+  .review h4 { font-family: var(--title); font-weight: 700; font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-soft); margin: 0 0 6px; }
+  .review p { margin: 0 0 15px; font-size: 0.98rem; color: #F1E4CC; max-width: 72ch; }
+  .review p:last-child { margin-bottom: 0; }
+  .ghost {
+    font-family: var(--title); font-weight: 600; font-size: 0.76rem;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent-soft); background: none; border: 1px solid var(--accent-line);
+    padding: 11px 19px; cursor: pointer;
+  }
+  .ghost:hover:not(:disabled) { background: var(--accent-wash); }
+  .ghost:disabled { opacity: .5; cursor: progress; }
+
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(241,233,218,.12); }
+
+  @media (max-width: 1080px) {
+    .frame { grid-template-columns: 1fr; }
+    .rail { position: static; max-height: none; border-right: 0; border-bottom: 1px solid var(--rule); }
+    .flow { grid-template-columns: repeat(3, 1fr); row-gap: 26px; }
+    .stage:nth-child(3)::after { display: none; }
+    .work, .panes { grid-template-columns: 1fr; }
+    main { padding: 26px 22px 60px; }
+  }
+  @media (max-width: 620px) {
+    .flow { grid-template-columns: repeat(2, 1fr); }
+    .stage::after { display: none; }
+    .judge { grid-template-columns: 34px 1fr; }
+    .judge .dt { grid-column: 2; }
+    .rw { grid-template-columns: 1fr; }
+    .rw .ar { display: none; }
+    main { padding: 22px 16px 50px; }
+    .hero { padding: 24px 20px 26px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
 </head>
-<body>
+<body data-house="gryffindor">
+<div class="frame">
 
-    <div class="stars"></div>
-    <div class="castle-bg"></div>
-    <div class="flyer flyer1"></div>
-    <div class="flyer flyer2"></div>
-    <div class="flyer flyer3"></div>
+  <!-- ============ sidebar ============ -->
+  <aside class="rail">
+    <div class="brand">
+      <svg width="27" height="27" viewBox="0 0 27 27" aria-hidden="true">
+        <circle cx="13.5" cy="13.5" r="12" fill="none" stroke="currentColor" stroke-width="1" style="color:var(--accent)" opacity=".5"/>
+        <path d="M13.5 3 L15.6 10.6 L23 13.5 L15.6 16.4 L13.5 24 L11.4 16.4 L4 13.5 L11.4 10.6 Z"
+              fill="none" stroke="currentColor" stroke-width="1.1" style="color:var(--accent)"/>
+        <circle cx="13.5" cy="13.5" r="2" style="fill:var(--accent)"/>
+      </svg>
+      <span class="name">Lumos</span>
+    </div>
+    <p class="intro">The Department of Magical Syntax runs on two charms: a Sorting Hat that gives
+      every value its proper type, and a Room of Requirement that keeps only the instructions the
+      program actually needs.</p>
 
-    <div class="parchment">
-        <h1>Department of Magical Syntax</h1>
-
-        <div class="dashboard">
-            <div id="phase-indicator" class="phase-indicator">Awaiting Incantation...</div>
-            <div id="ai-status" class="ai-status">Checking AI agent...</div>
-        </div>
-
-        <div class="instructions">
-            The AI agent now acts across the pipeline! It explains <b>Type Errors</b>, and if your code
-            passes, it steps in during <b>Code Generation</b> to optimize your output — powered live by
-            the OpenAI AI agent on the backend.
-        </div>
-
-        <textarea id="editor" spellcheck="false">
-#include <iostream>
-using namespace std;
-
-int main() {
-    // Perfect declarations
-    int galleons = 150;
-    string house = "Gryffindor";
-    float potion_score = 9.5;
-
-    return 0;
-}</textarea>
-
-        <div class="controls">
-            <button id="run-btn" onclick="runCompilerPipeline()">Run Compiler Pipeline</button>
-            <button id="ai-btn" onclick="requestAIHelp()">Ask Sorting Hat for Help!</button>
-        </div>
-
-        <div class="pensieve-wrapper">
-            <div id="console"></div>
-        </div>
+    <h3 class="label">Your house</h3>
+    <div class="houses" id="houses">
+      <button data-house="gryffindor" aria-pressed="true">Gryffindor</button>
+      <button data-house="slytherin" aria-pressed="false">Slytherin</button>
+      <button data-house="ravenclaw" aria-pressed="false">Ravenclaw</button>
+      <button data-house="hufflepuff" aria-pressed="false">Hufflepuff</button>
     </div>
 
-    <script>window.HOGWARTS_API_BASE = 'https://hogwarts-compiler.onrender.com';</script>
-    <script>
-        // -----------------------------------------------------------------
-        // Point this at your deployed Render backend. For local dev, leave
-        // it as localhost:4000 (the default backend port).
-        // -----------------------------------------------------------------
-        const API_BASE = window.HOGWARTS_API_BASE || 'http://localhost:4000';
+    <hr>
 
-        const editor = document.getElementById('editor');
-        const terminal = document.getElementById('console');
-        const phaseIndicator = document.getElementById('phase-indicator');
-        const aiStatus = document.getElementById('ai-status');
-        const aiBtn = document.getElementById('ai-btn');
-        const runBtn = document.getElementById('run-btn');
+    <h3 class="label">Choose an incantation</h3>
+    <select class="picker" id="picker" aria-label="Sample program"></select>
 
-        let aiMode = ''; // 'error' or 'optimize'
-        let pendingErrorContext = null;
-        let pendingOptimizePayload = null;
+    <hr>
 
-        function logToPensieve(message, type = 'normal') {
-            const entry = document.createElement('div');
-            entry.className = `log-entry log-${type}`;
+    <h3 class="label">The Sorting Hat</h3>
+    <div class="readout">
+      <div class="top"><span class="dot" id="tc-dot"></span><span class="nm">Type checker</span></div>
+      <div class="blurb" id="tc-blurb">Not yet consulted.</div>
+    </div>
 
-            let prefix = '';
-            if (type === 'phase') prefix = '⚙️ ';
-            if (type === 'error') prefix = '⚡ [TYPE ERROR] ';
-            if (type === 'success') prefix = '🪄 [OK] ';
-            if (type === 'ai') prefix = '🧙\u200d♂️ [SORTING HAT AI] ';
+    <h3 class="label">The Room of Requirement</h3>
+    <div class="readout">
+      <div class="top"><span class="dot" id="opt-dot"></span><span class="nm">Optimizer</span></div>
+      <div class="blurb" id="opt-blurb">Not yet opened.</div>
+    </div>
 
-            entry.innerHTML = `<strong>${prefix}</strong> ${message}`;
-            terminal.appendChild(entry);
-            terminal.scrollTop = terminal.scrollHeight;
-        }
+    <hr>
 
-        function clearPensieve() { terminal.innerHTML = ''; }
+    <h3 class="label">The oracle</h3>
+    <div class="readout">
+      <div class="top"><span class="dot" id="ai-dot"></span><span class="nm">Google Gemini</span></div>
+      <div class="blurb" id="ai-blurb">Listening for the backend.</div>
+    </div>
 
-        async function checkAIHealth() {
-            try {
-                const res = await fetch(`${API_BASE}/api/health`);
-                const data = await res.json();
-                aiStatus.textContent = data.aiConfigured
-                    ? `AI agent online (${data.model})`
-                    : 'AI agent in fallback mode (no OPENAI_API_KEY set)';
-            } catch (e) {
-                aiStatus.textContent = 'Backend unreachable — check API_BASE';
-            }
-        }
+    <h3 class="label">Types it can sort</h3>
+    <div class="typelist">
+      <span>int</span><span>float</span><span>double</span><span>char</span>
+      <span>bool</span><span>string</span><span>void</span><span>const</span>
+    </div>
+  </aside>
 
-        async function runCompilerPipeline() {
-            clearPensieve();
-            aiBtn.style.display = 'none';
-            runBtn.disabled = true;
-            phaseIndicator.style.color = 'var(--slytherin-green)';
-            phaseIndicator.textContent = 'Phase: Semantic Analysis...';
-            logToPensieve('[PHASE 1 & 2] Semantic Analysis (Type Checking)', 'phase');
+  <!-- ============ main ============ -->
+  <main>
+    <section class="hero">
+      <div class="eyebrow">Lumos &middot; Department of Magical Syntax</div>
+      <h1>Sort every value.<br>Then require less.</h1>
+      <p>Write a spell in a C-flavoured tongue. The Sorting Hat resolves every name through its scope
+        and checks every operand before a single instruction is conjured; the Room of Requirement then
+        runs ten passes over the intermediate code until nothing more can be taken away. Both show
+        their working, line by line — and when a verdict needs explaining, the oracle speaks.</p>
+    </section>
 
-            try {
-                const res = await fetch(`${API_BASE}/api/pipeline/run`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code: editor.value }),
-                });
-                const data = await res.json();
+    <div class="flow" id="flow"></div>
 
-                if (data.hasError) {
-                    const { line, varName, expected, actual } = data.errorContext;
-                    logToPensieve(
-                        `Line ${line}: Type mismatch! Declared <code>${expected}</code>, but assigned a <code>${actual}</code>.`,
-                        'error'
-                    );
-                    phaseIndicator.textContent = 'Compilation Halted: Type Error';
-                    phaseIndicator.style.color = 'var(--gryffindor-red)';
-                    logToPensieve('Pipeline halted. See the type error above.', 'error');
+    <section class="sec">
+      <div class="sec-head">
+        <span class="n">I</span><h2>The incantation</h2>
+        <span class="tail" id="src-tail"></span>
+      </div>
+      <div class="work">
+        <div class="editor">
+          <div class="gutter" id="gutter"></div>
+          <textarea id="src" spellcheck="false" autocomplete="off" aria-label="Source code"></textarea>
+        </div>
+        <div class="aside">
+          <h3>Ready to cast?</h3>
+          <p>Everything below comes from the compiler itself. The oracle is never asked what your
+            spell means, only to explain a verdict already reached.</p>
+          <button class="go" id="go">Cast the charm</button>
+          <span class="kbd" id="kbd">Ctrl + Enter</span>
+          <div class="status" id="status"></div>
+        </div>
+      </div>
+    </section>
 
-                    aiMode = 'error';
-                    pendingErrorContext = data.errorContext;
-                    aiBtn.textContent = 'Ask Sorting Hat for Help!';
-                    setTimeout(() => { aiBtn.style.display = 'inline-block'; }, 400);
-                } else {
-                    phaseIndicator.textContent = 'Phase: Code Generation...';
-                    logToPensieve('[PHASE 3] Standard Code Generation (Unoptimized)', 'phase');
-                    if (data.declarations.length === 0) {
-                        logToPensieve('No variables found to compile.', 'normal');
-                    } else {
-                        data.asm.forEach((line) => logToPensieve(line, 'asm'));
-                        logToPensieve('Standard compilation complete.', 'success');
-                    }
-                    phaseIndicator.textContent = 'Compilation Successful!';
+    <section class="sec">
+      <div class="sec-head">
+        <span class="n">II</span><h2>The Sorting Hat &mdash; type checker</h2>
+        <span class="tail" id="tc-tail"></span>
+      </div>
+      <p class="lede">Names resolve through a chain of scopes; every expression is given a type from
+        the bottom up and held against what its surroundings demand. Mismatches, narrowing
+        conversions, <code>const</code> violations, ill-fitting arguments and conditions that cannot
+        be tested for truth are all caught here, before any code is conjured.</p>
+      <div class="strip" id="tc-strip"></div>
+      <div id="tc-diags"></div>
+      <div class="panes" style="margin-top:22px">
+        <div>
+          <div class="pane-title">The Hat's reasoning</div>
+          <div class="scroller" id="tc-trace"></div>
+        </div>
+        <div>
+          <div class="pane-title">Symbol table</div>
+          <div class="scroller" id="tc-symbols"></div>
+        </div>
+      </div>
+      <details class="more">
+        <summary>Tokens and syntax tree</summary>
+        <div class="inner">
+          <div class="pane-title" style="margin-top:12px">Token stream</div>
+          <div class="toks" id="tokens"></div>
+          <div class="pane-title" style="margin-top:20px">Syntax tree</div>
+          <div id="tree"></div>
+        </div>
+      </details>
+    </section>
 
-                    if (data.declarations.length > 0) {
-                        aiMode = 'optimize';
-                        pendingOptimizePayload = { declarations: data.declarations, asm: data.asm };
-                        aiBtn.textContent = 'Ask AI to Optimize Code';
-                        setTimeout(() => { aiBtn.style.display = 'inline-block'; }, 600);
-                    }
-                }
-            } catch (err) {
-                logToPensieve(`Could not reach the backend at ${API_BASE}. Is it running?`, 'error');
-                phaseIndicator.textContent = 'Backend Unreachable';
-                phaseIndicator.style.color = 'var(--gryffindor-red)';
-            } finally {
-                runBtn.disabled = false;
-            }
-        }
+    <section class="sec">
+      <div class="sec-head">
+        <span class="n">III</span><h2>The Room of Requirement &mdash; optimizer</h2>
+        <span class="tail" id="opt-tail"></span>
+      </div>
+      <p class="lede">The sorted tree is lowered into three-address code, and then ten passes run
+        again and again until the instruction stream stops changing, because each pass uncovers work
+        for the others. Every rewrite below is recorded with what it replaced and why the replacement
+        is safe.</p>
+      <div class="strip" id="opt-strip"></div>
+      <div class="passbar" id="passbar"></div>
+      <div id="opt-log"></div>
+      <details class="more" id="ir-details">
+        <summary>Intermediate code, before and after</summary>
+        <div class="inner" id="ir-diff"></div>
+      </details>
+    </section>
 
-        async function requestAIHelp() {
-            aiBtn.style.display = 'none';
-            aiBtn.disabled = true;
+    <section class="sec">
+      <div class="sec-head">
+        <span class="n">IV</span><h2>The Pensieve &mdash; target code</h2>
+        <span class="tail" id="asm-tail"></span>
+      </div>
+      <p class="lede">Two memories of the same spell: a plain one that parks every value in its own
+        stack slot, and a refined one built from the optimized code, where linear-scan allocation
+        keeps living values in callee-saved registers.</p>
+      <div id="asm-block"></div>
+      <details class="more">
+        <summary>Register allocation and live ranges</summary>
+        <div class="inner" id="alloc"></div>
+      </details>
+    </section>
 
-            try {
-                if (aiMode === 'error' && pendingErrorContext) {
-                    const res = await fetch(`${API_BASE}/api/ai/explain-error`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(pendingErrorContext),
-                    });
-                    const data = await res.json();
-                    logToPensieve(data.explanation, 'ai');
-                    if (data.source === 'fallback') {
-                        logToPensieve('(AI agent unavailable — showing built-in fallback advice.)', 'normal');
-                    }
-                } else if (aiMode === 'optimize' && pendingOptimizePayload) {
-                    const res = await fetch(`${API_BASE}/api/ai/optimize`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(pendingOptimizePayload),
-                    });
-                    const data = await res.json();
-                    logToPensieve(data.explanation, 'ai');
-                    logToPensieve('; --- AI OPTIMIZED ASSEMBLY (REGISTER ALLOCATION) ---', 'optasm');
-                    (data.optimizedAsm || '').split('\n').forEach((line) => {
-                        if (line.trim()) logToPensieve(line, 'optasm');
-                    });
-                    if (data.source === 'fallback') {
-                        logToPensieve('(AI agent unavailable — showing built-in fallback optimization.)', 'normal');
-                    } else {
-                        logToPensieve('There! Much swifter execution. 10 points for efficient architecture!', 'ai');
-                    }
-                }
-            } catch (err) {
-                logToPensieve('The Sorting Hat could not be reached. Try again in a moment.', 'error');
-            } finally {
-                aiBtn.disabled = false;
-            }
-        }
+    <section class="sec">
+      <div class="sec-head">
+        <span class="n">V</span><h2>The oracle's verdict</h2>
+      </div>
+      <p class="lede">Ask Gemini to read this build's pass log, its register allocation and its
+        measured instruction counts, then say what the Room managed, what it was forbidden to touch,
+        and how you might write this spell so it compiles better.</p>
+      <div id="review"></div>
+    </section>
+  </main>
+</div>
 
-        checkAIHealth();
-    </script>
+<script>
+var API_BASE = window.LUMOS_API_BASE || window.HOGWARTS_API_BASE || 'http://localhost:4000';
+
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+};
+
+const src = $('src'), gutter = $('gutter'), goBtn = $('go');
+let result = null, asmView = 'optimized', hereLine = null;
+
+const SAMPLES = {
+  'Sorting gone wrong — every rule at once': `int main() {
+  int galleons = "one hundred";
+  const int limit = 10;
+  limit = 11;
+  int wrong = missing + 1;
+  double ratio = 10 / 0;
+  string house = "Gryffindor";
+  if (house) { print(1); }
+  int narrowed = 3.7;
+  return 0;
+}`,
+
+  'The Room at full strength': `int main() {
+  int base = 2 + 3 * 4;
+  int scaled = base * 8;
+  int twin = base * 8;
+  int unused = 42;
+  int total = scaled + twin - 0;
+
+  if (1 > 2) {
+    print(999);
+  }
+
+  print(total);
+  return 0;
+}`,
+
+  'Transfigurations — coercion and promotion': `double average(int total, int n) {
+  return total / n;
+}
+
+int main() {
+  double potion = 3;
+  float score = 9.5;
+  int rounded = score * 2;
+  bool brewed = potion > score;
+
+  if (brewed && rounded > 0) {
+    print(average(rounded, 2));
+  }
+  return 0;
+}`,
+
+  'Charms, loops and recursion': `int fib(int n) {
+  if (n < 2) { return n; }
+  return fib(n - 1) + fib(n - 2);
+}
+
+int main() {
+  int points = 0;
+  const int houses = 12;
+
+  for (int i = 0; i < houses; i++) {
+    if (i % 2 == 0) { continue; }
+    points += fib(i) * 4;
+  }
+
+  while (points > 1000) {
+    points = points / 2;
+  }
+
+  print(points);
+  return 0;
+}`,
+
+  'Scope, shadowing and dead spells': `int sort_student(int score) {
+  int spare = 7;
+  if (score > 0) {
+    int score = 99;
+    return score;
+  }
+  return 0;
+}
+
+int main() {
+  print(sort_student(5));
+  return 0;
+  print(404);
+}`
+};
+
+const REGS = { rbx: '#D3A625', r12: '#C98B3A', r13: '#5FBE86', r14: '#9B7BD4', r15: '#5B8DEF' };
+
+const ALL_PASSES = [
+  'constant-folding', 'constant-propagation', 'algebraic-simplification',
+  'strength-reduction', 'common-subexpression', 'copy-propagation',
+  'dead-code-elimination', 'branch-simplification', 'unreachable-code', 'label-cleanup'
+];
+
+const STAGES = [
+  { id: 'lexer', t: 'Scan', s: 'Tokens' },
+  { id: 'parser', t: 'Parse', s: 'Syntax tree' },
+  { id: 'semantic', t: 'Sort', s: 'Scopes & types', focus: true },
+  { id: 'ir', t: 'Lower', s: 'Three-address' },
+  { id: 'optimizer', t: 'Refine', s: 'Ten passes', focus: true },
+  { id: 'codegen', t: 'Conjure', s: 'x86-64' }
+];
+
+// ---------------- house theme ----------------
+function setHouse(house) {
+  document.body.dataset.house = house;
+  document.querySelectorAll('#houses button').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.house === house));
+  });
+  try { localStorage.setItem('lumos-house', house); } catch (e) {}
+}
+$('houses').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (b) setHouse(b.dataset.house);
+});
+
+// ---------------- editor ----------------
+function marks() {
+  const m = new Map();
+  if (result) (result.diagnostics || []).forEach((d) => {
+    const cur = m.get(d.line);
+    if (!cur || (cur === 'wrn' && d.severity === 'error')) m.set(d.line, d.severity === 'error' ? 'err' : 'wrn');
+  });
+  return m;
+}
+function drawGutter() {
+  const n = src.value.split('\n').length, m = marks();
+  gutter.innerHTML = '';
+  for (let i = 1; i <= n; i++) {
+    const row = el('div', m.get(i) || '');
+    if (hereLine === i) row.classList.add('here');
+    row.textContent = i;
+    if (m.get(i)) row.appendChild(el('span', 'm'));
+    gutter.appendChild(row);
+  }
+  gutter.scrollTop = src.scrollTop;
+  $('src-tail').textContent = n + ' lines';
+}
+function jump(line) {
+  const lines = src.value.split('\n');
+  let start = 0;
+  for (let i = 0; i < line - 1 && i < lines.length; i++) start += lines[i].length + 1;
+  src.focus();
+  src.setSelectionRange(start, start + (lines[line - 1] || '').length);
+  src.scrollTop = Math.max(0, (line - 4) * 12.5 * 1.62);
+  hereLine = line;
+  drawGutter();
+}
+src.addEventListener('input', () => { drawGutter(); save(); });
+src.addEventListener('scroll', () => { gutter.scrollTop = src.scrollTop; });
+src.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const a = src.selectionStart, b = src.selectionEnd;
+    src.value = src.value.slice(0, a) + '  ' + src.value.slice(b);
+    src.selectionStart = src.selectionEnd = a + 2;
+    drawGutter();
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); compile(); }
+});
+function save() { try { localStorage.setItem('lumos-source', src.value); } catch (e) {} }
+
+Object.keys(SAMPLES).forEach((name) => {
+  const o = document.createElement('option');
+  o.value = name; o.textContent = name;
+  $('picker').appendChild(o);
+});
+$('picker').addEventListener('change', (e) => {
+  src.value = SAMPLES[e.target.value]; save(); drawGutter(); compile();
+});
+
+// ---------------- pipeline ----------------
+function drawFlow(phases, runIdx) {
+  const box = $('flow');
+  box.innerHTML = '';
+  STAGES.forEach((s, i) => {
+    const p = phases ? phases.find((x) => x.id === s.id) : null;
+    const n = el('div', 'stage' + (s.focus ? ' focus' : ''));
+    if (runIdx === i) n.classList.add('running');
+    else if (p) n.classList.add(p.status);
+    n.appendChild(el('div', 't', s.t));
+    n.appendChild(el('div', 's', p && p.detail ? p.detail : s.s));
+    box.appendChild(n);
+  });
+}
+drawFlow(null, null);
+
+// ---------------- compile ----------------
+async function compile() {
+  goBtn.disabled = true; goBtn.textContent = 'Casting';
+  $('status').textContent = ''; hereLine = null;
+  let step = 0;
+  drawFlow(null, 0);
+  const tick = setInterval(() => { step = (step + 1) % 6; drawFlow(null, step); }, 85);
+
+  try {
+    const res = await fetch(API_BASE + '/api/compile', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: src.value })
+    });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      throw new Error(b.error || ('backend returned ' + res.status));
+    }
+    result = await res.json();
+    clearInterval(tick);
+    drawFlow(result.phases, null);
+    renderAll();
+    const broken = result.phases.find((p) => p.status === 'error');
+    $('status').textContent = result.ok
+      ? 'Cast cleanly in ' + (result.timings ? result.timings.totalMs : 0) + ' ms'
+      : 'Halted at ' + (broken ? broken.title.toLowerCase() : 'an error');
+  } catch (err) {
+    clearInterval(tick);
+    drawFlow(null, null);
+    result = null;
+    $('status').textContent = '';
+    $('tc-diags').innerHTML = '';
+    $('tc-diags').appendChild(el('div', 'none',
+      'No compiler answering at ' + API_BASE + '. Run npm start in the backend folder, or set window.LUMOS_API_BASE to your deployed URL. (' + err.message + ')'));
+  } finally {
+    goBtn.disabled = false; goBtn.textContent = 'Cast the charm';
+  }
+}
+goBtn.addEventListener('click', compile);
+
+function renderAll() {
+  renderTypeCheck();
+  renderOptimizer();
+  renderTarget();
+  renderReview();
+  renderExtras();
+  renderRail();
+  drawGutter();
+}
+
+function strip(node, cells) {
+  node.innerHTML = '';
+  cells.forEach(([v, k, tone]) => {
+    const c = el('div');
+    c.appendChild(el('div', 'v' + (tone ? ' ' + tone : ''), String(v)));
+    c.appendChild(el('div', 'k', k));
+    node.appendChild(c);
+  });
+}
+
+// ---------------- II: the Sorting Hat ----------------
+function renderTypeCheck() {
+  const tc = result.typeCheck;
+  const diags = result.diagnostics || [];
+  const errors = diags.filter((d) => d.severity === 'error');
+  const warns = diags.filter((d) => d.severity === 'warning');
+
+  strip($('tc-strip'), [
+    [result.symbols.length, 'symbols resolved'],
+    [tc ? tc.checks : 0, 'type judgements'],
+    [tc ? tc.conversions : 0, 'implicit conversions'],
+    [errors.length, 'type errors', errors.length ? 'bad' : 'good'],
+    [warns.length, 'warnings', warns.length ? '' : 'good']
+  ]);
+  const sem = result.phases.find((p) => p.id === 'semantic');
+  $('tc-tail').textContent = errors.length ? 'sorted out' : (sem && sem.status === 'skipped' ? 'never consulted' : 'accepted');
+
+  const box = $('tc-diags');
+  box.innerHTML = '';
+  if (!diags.length) {
+    box.appendChild(el('div', 'none', result.ok
+      ? 'Every name resolved and every operand sorted. The Hat has nothing to say.'
+      : 'Nothing to report yet.'));
+  } else {
+    diags.forEach((d) => {
+      const row = el('div', 'diag ' + d.severity);
+      row.appendChild(el('div', 'loc', 'line ' + d.line));
+      const body = el('div');
+      const msg = el('div', 'msg', d.message);
+      msg.appendChild(el('span', 'tag', d.phase));
+      body.appendChild(msg);
+      if (d.hint) body.appendChild(el('div', 'hint', d.hint));
+      const ask = el('button', 'ask', 'Ask the oracle');
+      ask.addEventListener('click', (e) => { e.stopPropagation(); explain(d, ask); });
+      body.appendChild(ask);
+      row.appendChild(body);
+      row.addEventListener('click', () => jump(d.line));
+      box.appendChild(row);
+    });
+  }
+
+  const trace = $('tc-trace');
+  trace.innerHTML = '';
+  const js = tc ? tc.judgements : [];
+  if (!js.length) {
+    trace.appendChild(el('div', 'none', 'No reasoning recorded — the Hat was never placed on this spell.'));
+  } else {
+    js.forEach((j) => {
+      const r = el('div', 'judge' + (/narrowing/.test(j.rule) ? ' narrow' : ''));
+      r.appendChild(el('div', 'ln', String(j.line)));
+      r.appendChild(el('div', 'rl', j.rule));
+      r.appendChild(el('div', 'dt', j.detail));
+      trace.appendChild(r);
+    });
+  }
+
+  const sym = $('tc-symbols');
+  sym.innerHTML = '';
+  if (!result.symbols.length) {
+    sym.appendChild(el('div', 'none', 'No variables declared.'));
+  } else {
+    const t = el('table', 'grid');
+    t.innerHTML = '<thead><tr><th>Name</th><th>Type</th><th>Scope</th><th>Line</th><th>Value</th></tr></thead>';
+    const b = el('tbody');
+    result.symbols.forEach((s) => {
+      const tr = el('tr');
+      const nm = el('td', 'k', s.name);
+      if (s.isConst) { nm.appendChild(document.createTextNode(' ')); nm.appendChild(el('span', 'const', 'const')); }
+      tr.appendChild(nm);
+      tr.appendChild(el('td', 'rule', s.type));
+      tr.appendChild(el('td', null, s.scope));
+      tr.appendChild(el('td', null, String(s.line)));
+      tr.appendChild(el('td', null, s.constValue === null ? '\u2014' : s.constValue));
+      b.appendChild(tr);
+    });
+    t.appendChild(b);
+    sym.appendChild(t);
+  }
+}
+
+async function explain(diagnostic, btn) {
+  btn.disabled = true; btn.textContent = 'Consulting';
+  const lines = src.value.split('\n');
+  try {
+    const res = await fetch(API_BASE + '/api/ai/explain', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ diagnostic: diagnostic, snippet: lines[diagnostic.line - 1] || '' })
+    });
+    const data = await res.json();
+    const note = el('div', 'said', data.explanation);
+    note.appendChild(el('span', 'by', data.source === 'ai' ? 'spoken by Gemini' : 'the compiler\u2019s own words, no oracle configured'));
+    btn.replaceWith(note);
+  } catch (e) { btn.disabled = false; btn.textContent = 'Ask the oracle'; }
+}
+
+// ---------------- III: the Room of Requirement ----------------
+function renderOptimizer() {
+  const s = result.optimizationStats;
+  const stripBox = $('opt-strip'), bar = $('passbar'), log = $('opt-log'), diff = $('ir-diff');
+  bar.innerHTML = ''; log.innerHTML = ''; diff.innerHTML = '';
+
+  if (!s) {
+    stripBox.innerHTML = '';
+    $('opt-tail').textContent = 'door never appeared';
+    log.appendChild(el('div', 'none',
+      'The Room stayed shut — the Sorting Hat refused this spell. Clear the errors in section II and cast again.'));
+    return;
+  }
+
+  $('opt-tail').textContent = s.rewrites + ' rewrites';
+  strip(stripBox, [
+    [s.irBefore + ' \u2192 ' + s.irAfter, 'IR instructions'],
+    [s.irReduction + '%', 'IR removed', s.irReduction > 0 ? 'good' : ''],
+    [s.rewrites, 'rewrites applied'],
+    [result.asm.metrics.naiveInstructions + ' \u2192 ' + result.asm.metrics.optimizedInstructions, 'machine instructions'],
+    [result.asm.metrics.reduction + '%', 'fewer conjured', result.asm.metrics.reduction > 0 ? 'good' : '']
+  ]);
+
+  const counts = {};
+  (result.optimizationLog || []).forEach((e) => { counts[e.pass] = (counts[e.pass] || 0) + 1; });
+  ALL_PASSES.forEach((p) => {
+    const n = counts[p] || 0;
+    const chip = el('span', 'passchip' + (n ? '' : ' off'), p.replace(/-/g, ' '));
+    if (n) chip.appendChild(el('b', null, String(n)));
+    bar.appendChild(chip);
+  });
+
+  const entries = result.optimizationLog || [];
+  if (!entries.length) {
+    log.appendChild(el('div', 'none',
+      'Nothing to rewrite. Every value here depends on something no compiler can know until the spell runs. Choose "The Room at full strength" to watch all ten passes fire.'));
+  } else {
+    const groups = new Map();
+    entries.forEach((e) => { if (!groups.has(e.pass)) groups.set(e.pass, []); groups.get(e.pass).push(e); });
+    groups.forEach((list, pass) => {
+      const g = el('div', 'grp');
+      const h = el('div', 'gh');
+      h.appendChild(el('span', 'gn', pass.replace(/-/g, ' ')));
+      h.appendChild(el('span', 'gc', list.length + ' \u00D7'));
+      g.appendChild(h);
+      list.slice(0, 10).forEach((e) => {
+        const c = el('div', 'rw');
+        c.appendChild(el('div', 'b', e.before));
+        c.appendChild(el('div', 'ar', '\u2192'));
+        c.appendChild(el('div', 'a' + (e.after === '(deleted)' ? ' del' : ''), e.after));
+        c.appendChild(el('div', 'why', e.note));
+        g.appendChild(c);
+      });
+      if (list.length > 10) g.appendChild(el('div', 'none', 'and ' + (list.length - 10) + ' more of the same kind.'));
+      log.appendChild(g);
+    });
+  }
+
+  (result.ir || []).forEach((fn) => {
+    const match = (result.optimizedIr || []).find((f) => f.name === fn.name);
+    const after = match ? match.lines : [];
+    const aset = new Set(after), bset = new Set(fn.lines);
+    const block = el('div', 'fnblock');
+    block.appendChild(el('div', 'fnhead', fn.name));
+    const panes = el('div', 'panes');
+
+    const l = el('div');
+    l.appendChild(el('div', 'pane-title', 'Before (' + fn.lines.length + ')'));
+    const lc = el('div', 'ir');
+    fn.lines.forEach((x) => {
+      const d = el('div', (aset.has(x) ? '' : 'gone ') + (x.endsWith(':') ? 'lbl' : ''));
+      d.textContent = x; lc.appendChild(d);
+    });
+    l.appendChild(lc);
+
+    const r = el('div');
+    r.appendChild(el('div', 'pane-title', 'After (' + after.length + ')'));
+    const rc = el('div', 'ir');
+    after.forEach((x) => {
+      const d = el('div', (bset.has(x) ? '' : 'new ') + (x.endsWith(':') ? 'lbl' : ''));
+      d.textContent = x; rc.appendChild(d);
+    });
+    r.appendChild(rc);
+
+    panes.appendChild(l); panes.appendChild(r);
+    block.appendChild(panes);
+    diff.appendChild(block);
+  });
+}
+
+// ---------------- IV: the Pensieve ----------------
+function renderTarget() {
+  const box = $('asm-block'), alloc = $('alloc');
+  box.innerHTML = ''; alloc.innerHTML = '';
+  const m = result.asm ? result.asm.metrics : null;
+  if (!m) {
+    $('asm-tail').textContent = 'no memory formed';
+    box.appendChild(el('div', 'none', 'No code was conjured — the pipeline stopped before this phase.'));
+    return;
+  }
+  $('asm-tail').textContent = m.optimizedInstructions + ' instructions';
+
+  const seg = el('div', 'seg');
+  [['optimized', 'Refined (' + m.optimizedInstructions + ')'], ['naive', 'Plain (' + m.naiveInstructions + ')']]
+    .forEach(([id, lbl]) => {
+      const b = el('button', null, lbl);
+      b.setAttribute('aria-pressed', String(asmView === id));
+      b.addEventListener('click', () => { asmView = id; renderTarget(); });
+      seg.appendChild(b);
+    });
+  box.appendChild(seg);
+  const pre = el('pre', 'asm');
+  pre.textContent = (asmView === 'naive' ? result.asm.naive : result.asm.optimized).join('\n');
+  box.appendChild(pre);
+
+  const allocs = (result.asm.allocations || []).filter((a) => a.ranges && a.ranges.length);
+  if (!allocs.length) {
+    alloc.appendChild(el('div', 'none',
+      'Nothing left to place — the Room folded this spell down to constants before the Pensieve saw it.'));
+    return;
+  }
+  const legend = el('div', 'legend');
+  Object.keys(REGS).forEach((reg) => {
+    const s = el('span'); const i = el('i'); i.style.background = REGS[reg];
+    s.appendChild(i); s.appendChild(document.createTextNode(reg)); legend.appendChild(s);
+  });
+  const sp = el('span'); const si = el('i');
+  si.style.background = 'repeating-linear-gradient(135deg, rgba(210,72,79,.6) 0 3px, transparent 3px 6px)';
+  sp.appendChild(si); sp.appendChild(document.createTextNode('spilled to stack')); legend.appendChild(sp);
+  alloc.appendChild(legend);
+
+  allocs.forEach((a) => {
+    alloc.appendChild(el('div', 'fnhead', a.fn + ' \u2014 ' + a.allocation.length + ' in registers, '
+      + a.spilled.length + ' spilled, ' + a.frame + ' byte frame'));
+    const span = Math.max(1, a.length - 1);
+    a.ranges.forEach((r) => {
+      const row = el('div', 'range');
+      row.appendChild(el('div', 'nm', r.name));
+      const track = el('div', 'track');
+      const bar = el('div', 'bar' + (r.reg ? '' : ' spilled'));
+      const left = (r.start / span) * 100;
+      bar.style.left = left + '%';
+      bar.style.width = Math.min(100 - left, Math.max(3, ((r.end - r.start) / span) * 100)) + '%';
+      if (r.reg) bar.style.background = REGS[r.reg] || '#8C8270';
+      bar.textContent = r.reg || 'stack';
+      bar.title = r.name + ' live from instruction ' + r.start + ' to ' + r.end;
+      track.appendChild(bar); row.appendChild(track); alloc.appendChild(row);
+    });
+  });
+}
+
+// ---------------- V: the verdict ----------------
+function renderReview() {
+  const box = $('review');
+  box.innerHTML = '';
+  if (!result.ok) {
+    box.appendChild(el('div', 'none', 'A verdict needs a spell that made it all the way through. Clear the Hat\u2019s objections first.'));
+    return;
+  }
+  const btn = el('button', 'ghost', 'Summon the verdict');
+  btn.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = 'Reading the pass log';
+    try {
+      const res = await fetch(API_BASE + '/api/ai/review', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: src.value,
+          optimizationLog: result.optimizationLog,
+          optimizationStats: result.optimizationStats,
+          metrics: result.asm.metrics,
+          allocations: result.asm.allocations,
+          warnings: result.diagnostics.filter((d) => d.severity === 'warning').map((d) => 'line ' + d.line + ': ' + d.message)
+        })
+      });
+      const data = await res.json();
+      const card = el('div', 'review');
+      [['What the Room managed', data.sections.did],
+       ['What it could not touch', data.sections.blocked],
+       ['Casting this spell better', data.sections.advice]].forEach(([h, t]) => {
+        if (!t) return;
+        card.appendChild(el('h4', null, h));
+        card.appendChild(el('p', null, t));
+      });
+      box.innerHTML = '';
+      box.appendChild(card);
+      box.appendChild(el('div', 'none', data.source === 'ai'
+        ? 'spoken by Gemini, from this build\u2019s pass log'
+        : 'drawn from the pass log, no oracle configured'));
+    } catch (e) { btn.disabled = false; btn.textContent = 'Summon the verdict'; }
+  });
+  box.appendChild(btn);
+}
+
+// ---------------- extras ----------------
+function renderExtras() {
+  const tk = $('tokens');
+  tk.innerHTML = '';
+  (result.tokens || []).forEach((t) => {
+    const n = el('span', 'tk', t.value);
+    n.dataset.t = t.type;
+    n.title = t.type + ' at line ' + t.line + ', column ' + t.col;
+    tk.appendChild(n);
+  });
+
+  const tr = $('tree');
+  tr.innerHTML = '';
+  if (!result.ast) { tr.appendChild(el('div', 'none', 'No tree — parsing did not complete.')); return; }
+  const root = el('ul', 'tree');
+  root.appendChild(treeNode(result.ast, 0));
+  tr.appendChild(root);
+}
+
+function treeNode(node, depth) {
+  const li = el('li'), row = el('span', 'row');
+  const kids = (node.children || []).filter(Boolean);
+  let tg = null;
+  if (kids.length) {
+    tg = el('button', 'tg', '\u25BE');
+    tg.setAttribute('aria-label', 'Toggle children');
+    tg.addEventListener('click', () => {
+      li.classList.toggle('shut');
+      tg.textContent = li.classList.contains('shut') ? '\u25B8' : '\u25BE';
+    });
+    row.appendChild(tg);
+  }
+  row.appendChild(el('span', 'lb', node.label));
+  row.appendChild(el('span', 'kd', node.kind));
+  if (node.type) row.appendChild(el('span', 'ty', node.type));
+  li.appendChild(row);
+  if (kids.length) {
+    const ul = el('ul');
+    kids.forEach((c) => ul.appendChild(treeNode(c, depth + 1)));
+    li.appendChild(ul);
+    if (depth > 4) { li.classList.add('shut'); tg.textContent = '\u25B8'; }
+  }
+  return li;
+}
+
+function renderRail() {
+  const tc = result.typeCheck;
+  const errors = (result.diagnostics || []).filter((d) => d.severity === 'error').length;
+  const warns = (result.diagnostics || []).filter((d) => d.severity === 'warning').length;
+  const sem = result.phases.find((p) => p.id === 'semantic');
+
+  $('tc-dot').className = 'dot ' + (errors ? 'fail' : (warns ? 'warn' : 'pass'));
+  $('tc-blurb').textContent = sem && sem.status === 'skipped'
+    ? 'Never consulted — an earlier phase failed.'
+    : (tc ? tc.checks + ' judgements, ' + tc.conversions + ' implicit conversions, '
+        + errors + ' errors, ' + warns + ' warnings.' : 'Not yet consulted.');
+
+  const s = result.optimizationStats;
+  $('opt-dot').className = 'dot ' + (s ? (s.rewrites ? 'pass' : 'warn') : 'fail');
+  $('opt-blurb').textContent = s
+    ? s.rewrites + ' rewrites, IR ' + s.irBefore + ' to ' + s.irAfter + ' (' + s.irReduction + '% removed).'
+    : 'The door never appeared — type errors halted the build.';
+}
+
+// ---------------- backend status ----------------
+async function checkBackend() {
+  try {
+    const res = await fetch(API_BASE + '/api/health');
+    const d = await res.json();
+    $('ai-dot').className = 'dot ' + (d.aiConfigured ? 'live' : 'warn');
+    $('ai-blurb').textContent = d.aiConfigured
+      ? 'Awake and listening, model ' + d.model + '.'
+      : 'Asleep — no API key. Verdicts fall back to the compiler\u2019s own words.';
+  } catch (e) {
+    $('ai-dot').className = 'dot';
+    $('ai-blurb').textContent = 'Backend unreachable at ' + API_BASE + '.';
+  }
+}
+
+// ---------------- boot ----------------
+if (/Mac|iPhone|iPad/.test(navigator.platform || '')) $('kbd').textContent = '\u2318 + Enter';
+let savedHouse = null, savedSrc = null;
+try { savedHouse = localStorage.getItem('lumos-house'); savedSrc = localStorage.getItem('lumos-source'); } catch (e) {}
+setHouse(savedHouse || 'gryffindor');
+src.value = savedSrc || SAMPLES['Sorting gone wrong — every rule at once'];
+drawGutter();
+checkBackend();
+</script>
 </body>
 </html>

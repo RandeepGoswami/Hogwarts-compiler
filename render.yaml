@@ -1,12 +1,12 @@
 services:
   - type: web
-    name: hogwarts-compiler-backend
+    name: lumos-backend
     runtime: node
     rootDir: backend
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      - key: OPENAI_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
-      - key: OPENAI_MODEL
-        value: gpt-4o-mini
+      - key: GEMINI_MODEL
+        value: gemini-flash-latest
