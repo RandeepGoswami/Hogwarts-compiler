@@ -16,6 +16,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { compile } = require('./src/compiler');
+const { autofix } = require('./src/autofix');
 
 const app = express();
 app.use(cors());
@@ -250,6 +251,38 @@ function fallbackReview(stats, metrics) {
       'Hoist loop-invariant expressions out of the loop yourself, prefer const for values that never change so they fold away, and keep live ranges short — a variable used across a call has to survive in a callee-saved register or on the stack.',
   };
 }
+
+/**
+ * AI-assisted autofix.
+ * Deterministic pattern-fixes run first and are always applied; a
+ * Gemini pass only ever runs on what's left, and only ever counts as
+ * successful if recompiling its output shows fewer errors than
+ * before it ran. Nothing here is ever reported as fixed without a
+ * clean (or improved) recompile behind it.
+ */
+app.post('/api/ai/autofix', async (req, res) => {
+  const { code } = req.body || {};
+  if (typeof code !== 'string') {
+    return res.status(400).json({ error: 'code (string) is required' });
+  }
+  if (Buffer.byteLength(code, 'utf8') > MAX_SOURCE_BYTES) {
+    return res.status(413).json({ error: `Source is too large (limit ${MAX_SOURCE_BYTES} bytes).` });
+  }
+
+  try {
+    const agent = GEMINI_API_KEY
+      ? (sys, user, opts) => callAgent(sys, user, opts)
+      : null;
+    const result = await autofix(code, agent);
+    return res.json(result);
+  } catch (err) {
+    console.error('Autofix crashed', err);
+    return res.status(500).json({
+      error: 'The autofixer hit an internal error.',
+      detail: String(err && err.message ? err.message : err),
+    });
+  }
+});
 
 app.use((req, res) => res.status(404).json({ error: `No route ${req.method} ${req.path}` }));
 

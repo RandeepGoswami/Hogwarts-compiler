@@ -283,6 +283,30 @@
 
   .none { color: var(--dust); font-size: 0.95rem; font-style: italic; padding: 14px 0; max-width: 70ch; }
 
+  .reparo-panel {
+    border: 1px solid var(--accent-line); background: var(--accent-wash);
+    padding: 16px 18px; margin-bottom: 18px;
+  }
+  .reparo-panel h4 {
+    font-family: var(--title); font-weight: 700; font-size: 0.8rem;
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-soft); margin: 0 0 10px;
+  }
+  .reparo-panel ul { margin: 0 0 12px; padding-left: 18px; }
+  .reparo-panel li { font-size: 0.94rem; color: #F1E4CC; margin-bottom: 5px; }
+  .reparo-panel .meta { font-family: var(--mono); font-size: 0.7rem; color: var(--dust); margin-bottom: 10px; }
+  .reparo-panel .row { display: flex; gap: 10px; align-items: center; }
+  .reparo-panel .undo {
+    font-family: var(--title); font-weight: 600; font-size: 0.72rem;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ash); background: none; border: 1px solid var(--rule);
+    padding: 7px 14px; cursor: pointer;
+  }
+  .reparo-panel .undo:hover { color: var(--parch); border-color: var(--ash); }
+  .reparo-panel.incomplete { border-color: rgba(224,169,60,.45); background: rgba(224,169,60,.07); }
+  .reparo-panel.incomplete h4 { color: var(--warn); }
+  .reparo-panel.none-needed { border-color: rgba(95,190,134,.4); background: rgba(95,190,134,.07); }
+  .reparo-panel.none-needed h4 { color: var(--pass); }
+
   /* stat strip */
   .strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); border: 1px solid var(--rule); margin-bottom: 20px; }
   .strip > div { padding: 13px 16px; border-right: 1px solid var(--rule); background: var(--panel); }
@@ -554,6 +578,11 @@
         conversions, <code>const</code> violations, ill-fitting arguments and conditions that cannot
         be tested for truth are all caught here, before any code is conjured.</p>
       <div class="strip" id="tc-strip"></div>
+      <div id="reparo-bar" style="display:none; margin-bottom:16px;">
+        <button class="ghost" id="reparo-btn">Cast Reparo</button>
+        <span class="label" style="margin-left:12px; letter-spacing:0.06em;" id="reparo-hint">mends the errors below on its own, then shows you what it changed</span>
+      </div>
+      <div id="reparo-result"></div>
       <div id="tc-diags"></div>
       <div class="panes" style="margin-top:22px">
         <div>
@@ -895,7 +924,13 @@ function renderTypeCheck() {
     [warns.length, 'warnings', warns.length ? '' : 'good']
   ]);
   const sem = result.phases.find((p) => p.id === 'semantic');
-  $('tc-tail').textContent = errors.length ? 'sorted out' : (sem && sem.status === 'skipped' ? 'never consulted' : 'accepted');
+  $('tc-tail').textContent = errors.length
+    ? 'sorted out'
+    : (sem && sem.status === 'skipped' ? 'never consulted' : 'accepted');
+
+  $('reparo-bar').style.display = errors.length ? 'flex' : 'none';
+  $('reparo-bar').style.alignItems = 'center';
+  if (!errors.length) $('reparo-result').innerHTML = '';
 
   const box = $('tc-diags');
   box.innerHTML = '';
@@ -973,6 +1008,115 @@ async function explain(diagnostic, btn) {
     note.appendChild(el('span', 'by', data.source === 'ai' ? 'spoken by Gemini' : 'the compiler\u2019s own words, no oracle configured'));
     btn.replaceWith(note);
   } catch (e) { btn.disabled = false; btn.textContent = 'Ask the oracle'; }
+}
+
+// ---------------- Reparo: automatic fixing ----------------
+let preReparoCode = null;
+
+$('reparo-btn').addEventListener('click', castReparo);
+
+async function castReparo() {
+  const btn = $('reparo-btn');
+  const before = src.value;
+  btn.disabled = true; btn.textContent = 'Casting Reparo';
+  $('reparo-result').innerHTML = '';
+
+  try {
+    const res = await fetch(API_BASE + '/api/ai/autofix', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: src.value })
+    });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      throw new Error(b.error || ('backend returned ' + res.status));
+    }
+    const data = await res.json();
+
+    if (data.originalErrorCount === 0) {
+      renderReparoPanel({ noneNeeded: true });
+      return;
+    }
+
+    if (!data.changed) {
+      renderReparoPanel({
+        incomplete: true,
+        fixes: [],
+        remaining: data.remainingErrors.length,
+        message: 'Reparo could not find a safe rewrite for these errors on its own.',
+      });
+      return;
+    }
+
+    preReparoCode = before;
+    src.value = data.code;
+    save();
+    drawGutter();
+    renderReparoPanel({
+      fullyFixed: data.fullyFixed,
+      fixes: data.fixes,
+      remaining: data.remainingErrors.length,
+      aiAttempted: data.aiAttempted,
+    });
+    await compile();
+  } catch (err) {
+    $('reparo-result').innerHTML = '';
+    $('reparo-result').appendChild(el('div', 'none', 'Reparo fizzled: ' + err.message));
+  } finally {
+    btn.disabled = false; btn.textContent = 'Cast Reparo';
+  }
+}
+
+function renderReparoPanel(opts) {
+  const box = $('reparo-result');
+  box.innerHTML = '';
+
+  if (opts.noneNeeded) {
+    const p = el('div', 'reparo-panel none-needed');
+    p.appendChild(el('h4', null, 'Nothing to mend'));
+    p.appendChild(el('div', 'meta', 'This spell already type-checks cleanly.'));
+    box.appendChild(p);
+    return;
+  }
+
+  const p = el('div', 'reparo-panel' + (opts.remaining > 0 ? ' incomplete' : ''));
+  p.appendChild(el('h4', null, opts.fullyFixed ? 'Reparo mended every error' : 'Reparo made partial progress'));
+
+  if (opts.message) {
+    p.appendChild(el('div', 'meta', opts.message));
+  } else {
+    const metaBits = [];
+    if (opts.fixes && opts.fixes.length) metaBits.push(opts.fixes.length + ' change' + (opts.fixes.length === 1 ? '' : 's'));
+    if (opts.remaining > 0) metaBits.push(opts.remaining + ' error' + (opts.remaining === 1 ? '' : 's') + ' still need attention');
+    if (opts.aiAttempted && opts.fixes.some((f) => f.line === null)) metaBits.push('the oracle helped with the rest');
+    p.appendChild(el('div', 'meta', metaBits.join(' \u2014 ')));
+  }
+
+  if (opts.fixes && opts.fixes.length) {
+    const ul = el('ul');
+    opts.fixes.forEach((f) => {
+      const li = el('li', null, f.note.replace(/^line \d+: /, ''));
+      if (f.line !== null) li.textContent = 'Line ' + f.line + ': ' + f.note.replace(/^line \d+: /, '');
+      ul.appendChild(li);
+    });
+    p.appendChild(ul);
+  }
+
+  const row = el('div', 'row');
+  const undo = el('button', 'undo', 'Undo Reparo');
+  undo.addEventListener('click', () => {
+    if (preReparoCode !== null) {
+      src.value = preReparoCode;
+      preReparoCode = null;
+      save();
+      drawGutter();
+      box.innerHTML = '';
+      compile();
+    }
+  });
+  row.appendChild(undo);
+  p.appendChild(row);
+
+  box.appendChild(p);
 }
 
 // ---------------- III: the Room of Requirement ----------------

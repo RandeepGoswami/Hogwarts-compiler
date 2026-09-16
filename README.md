@@ -93,6 +93,35 @@ slot; the optimized one computes live ranges, runs linear-scan allocation over
 the callee-saved registers, spills the longest-lived value when it runs out, and
 reports the instruction-count delta between the two.
 
+## Reparo — automatic error fixing
+
+Section II has a "Cast Reparo" button (named for the actual Harry Potter
+mending charm) that rewrites the source to resolve type errors on its own,
+with one hard rule: **nothing is ever reported as fixed without a clean
+recompile behind it.** The endpoint (`POST /api/ai/autofix`) never trusts its
+own output — it always recompiles the result before responding.
+
+Two passes run in order:
+
+1. **Deterministic pattern fixes** — no AI, no network call. Handles the
+   error shapes that have one obviously-correct rewrite: unquoting a numeric
+   string literal, retyping a declaration when the string is genuinely text,
+   quoting a bare value assigned to a `string`, removing `const` so a later
+   reassignment is legal, declaring a stub for an undeclared name, rewriting
+   an untestable string condition (`if (name)` → `if (name != "")`), and
+   changing a constant-zero divisor. Multiple independent fixes can stack on
+   the same physical line.
+2. **A Gemini pass on whatever's left**, if a key is configured. The model is
+   told to change as little as possible and output nothing but corrected
+   source. Its output is recompiled immediately; if the error count didn't
+   go down, the rewrite is discarded and never shown as a success.
+
+The response always reports `originalErrorCount`, the list of `fixes`
+applied (each tied to a line, in plain language), whether it's `fullyFixed`,
+and any `remainingErrors` — so a partial fix is shown honestly as partial,
+never dressed up as complete. The frontend applies accepted fixes to the
+editor and offers an "Undo Reparo" button to restore the pre-fix source.
+
 ## The AI layer
 
 The compiler is deterministic. The model is only asked to do the two things a
@@ -116,6 +145,7 @@ built from the compiler's own output, so nothing in the UI breaks.
 | `POST /api/pipeline/run` | alias of `/api/compile` for the previous API shape |
 | `POST /api/ai/explain` | `{ diagnostic, snippet }` → explanation |
 | `POST /api/ai/review` | build artifacts → three-part review |
+| `POST /api/ai/autofix` | `{ code }` → deterministic + AI-assisted error fixes, verified by recompiling |
 
 ## Run it locally
 
