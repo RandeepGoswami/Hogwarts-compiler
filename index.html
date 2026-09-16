@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Department of Magical Syntax (AI Code Gen)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --parchment: #e2cca6;
+            --parchment-dark: #b8996b;
+            --parchment-light: #f5eedf;
+            --ink: #1f140c;
+            --gryffindor-red: #740001;
+            --gryffindor-gold: #d3a625;
+            --slytherin-green: #1a472a;
+            --ravenclaw-blue: #0e1a40;
+            --magic-glow: rgba(211, 166, 37, 0.6);
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Playfair Display', serif;
+            color: var(--ink);
+            background: linear-gradient(to bottom, #0a1128 0%, #1c2b59 60%, #000000 100%);
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        .stars {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background-image:
+                radial-gradient(2px 2px at 20px 30px, #ffffff, rgba(0,0,0,0)),
+                radial-gradient(2px 2px at 40px 70px, #ffffff, rgba(0,0,0,0)),
+                radial-gradient(2px 2px at 90px 140px, #ffffff, rgba(0,0,0,0)),
+                radial-gradient(2px 2px at 160px 90px, #ffffff, rgba(0,0,0,0));
+            background-repeat: repeat; background-size: 200px 200px;
+            z-index: -3; opacity: 0.5; animation: twinkle 5s infinite alternate;
+        }
+
+        @keyframes twinkle { 0% { opacity: 0.3; } 100% { opacity: 0.7; } }
+
+        .castle-bg {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 300px;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 300" preserveAspectRatio="none"><path d="M100,300 L100,200 L120,180 L120,140 L140,100 L160,140 L160,180 L180,200 L180,300 Z M250,300 L250,150 L270,120 L300,50 L330,120 L350,150 L350,300 Z M400,300 L400,220 L420,200 L420,160 L450,100 L480,160 L480,200 L500,220 L500,300 Z M550,300 L550,180 L580,140 L600,60 L620,140 L650,180 L650,300 Z M750,300 L750,230 L770,210 L770,150 L800,80 L830,150 L830,210 L850,230 L850,300 Z" fill="%230b1021"/></svg>') no-repeat bottom center;
+            background-size: cover; z-index: -2; opacity: 0.9;
+        }
+
+        .flyer {
+            position: absolute; width: 40px; height: 20px;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 20"><path d="M10,15 L45,15 L45,13 L10,13 Z M25,13 L30,5 L20,5 Z M35,13 C35,10 40,8 45,8 C40,11 40,13 35,13 Z" fill="%23000"/></svg>') no-repeat;
+            opacity: 0.6; z-index: -1;
+        }
+
+        .flyer1 { top: 15%; animation: flyRight 18s linear infinite; }
+        .flyer2 { top: 25%; left: -50px; animation: flyRight 25s linear infinite 7s; }
+        .flyer3 { top: 10%; right: -50px; transform: scaleX(-1); animation: flyLeft 22s linear infinite 3s; }
+
+        @keyframes flyRight {
+            0% { left: -100px; transform: translateY(0) rotate(5deg); }
+            50% { transform: translateY(-20px) rotate(0deg); }
+            100% { left: 110vw; transform: translateY(10px) rotate(-5deg); }
+        }
+
+        @keyframes flyLeft {
+            0% { right: -100px; transform: scaleX(-1) translateY(0) rotate(5deg); }
+            50% { transform: scaleX(-1) translateY(15px) rotate(0deg); }
+            100% { right: 110vw; transform: scaleX(-1) translateY(-10px) rotate(-5deg); }
+        }
+
+        .parchment {
+            background-color: var(--parchment);
+            background-image:
+                linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%),
+                radial-gradient(circle, transparent 70%, var(--parchment-dark) 150%);
+            width: 100%; max-width: 900px; border-radius: 4px;
+            box-shadow: inset 0 0 40px rgba(139, 69, 19, 0.4), inset 0 0 10px rgba(0,0,0,0.5), 0 20px 50px rgba(0,0,0,0.8), 0 0 100px rgba(255, 255, 255, 0.1);
+            padding: 40px; position: relative; z-index: 10;
+        }
+
+        .parchment::after {
+            content: 'C++'; position: absolute; bottom: 30px; right: 40px;
+            width: 65px; height: 65px; background: #8b0000; border-radius: 50%;
+            color: #d3a625; font-family: 'Cinzel Decorative', serif; font-size: 28px;
+            line-height: 65px; text-align: center;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.7), 2px 4px 6px rgba(0,0,0,0.5);
+            border: 2px solid #5a0000; transform: rotate(-15deg); opacity: 0.8; pointer-events: none;
+        }
+
+        h1 {
+            font-family: 'Cinzel Decorative', cursive; text-align: center;
+            color: var(--gryffindor-red); font-size: 2.2rem; margin-top: 0;
+            text-shadow: 1px 1px 0px var(--parchment-light), 2px 2px 2px rgba(0,0,0,0.3);
+            border-bottom: 2px solid var(--parchment-dark); padding-bottom: 15px; margin-bottom: 15px;
+        }
+
+        .dashboard {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px; font-weight: bold; font-size: 1.1rem; color: var(--ravenclaw-blue);
+        }
+
+        .phase-indicator {
+            font-family: 'Cinzel Decorative', cursive; font-size: 1.4rem; color: var(--slytherin-green);
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.2); transition: color 0.3s;
+        }
+
+        .ai-status {
+            font-size: 0.85rem; font-style: italic; color: var(--ravenclaw-blue); opacity: 0.8;
+        }
+
+        .instructions {
+            font-style: italic; text-align: center; margin-bottom: 20px; color: #4a3623;
+            background: rgba(255,255,255,0.2); padding: 10px; border-radius: 5px; border-left: 4px solid var(--gryffindor-gold);
+        }
+
+        textarea {
+            width: 100%; height: 260px; background: rgba(255, 255, 255, 0.4);
+            border: 2px solid var(--parchment-dark); border-radius: 2px;
+            font-family: 'Fira Code', monospace; font-size: 1rem; color: #111;
+            padding: 15px; box-sizing: border-box; resize: none; outline: none;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.1); transition: all 0.3s ease; margin-bottom: 20px;
+        }
+
+        textarea:focus {
+            background: rgba(255, 255, 255, 0.6); border-color: var(--gryffindor-gold);
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.1), 0 0 15px var(--magic-glow);
+        }
+
+        .controls { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; }
+
+        button {
+            font-family: 'Cinzel Decorative', cursive; background: var(--gryffindor-red); color: var(--parchment-light);
+            border: 2px solid var(--gryffindor-gold); padding: 10px 20px; font-size: 1.1rem; cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3); transition: all 0.2s ease;
+        }
+
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.4), 0 0 15px var(--gryffindor-gold); }
+
+        #ai-btn { background: var(--ravenclaw-blue); display: none; border-color: #4a6fa5; animation: pulse 1.5s infinite; }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(14, 26, 64, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(14, 26, 64, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(14, 26, 64, 0); }
+        }
+
+        .pensieve-wrapper { position: relative; }
+        .pensieve-wrapper::before {
+            content: 'The Pensieve (Compiler Output)'; position: absolute; top: -12px; left: 20px;
+            background: var(--parchment); padding: 0 10px; font-style: italic; font-weight: bold; color: var(--ink); z-index: 1;
+        }
+
+        #console {
+            background-color: #050a0f; background-image: radial-gradient(circle at center, #0c1622 0%, #03060a 100%);
+            border: 3px solid #2c3e50; border-radius: 4px; height: 260px; overflow-y: auto;
+            padding: 25px 15px 15px 15px; font-family: 'Fira Code', monospace; font-size: 0.95rem;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8); color: #ecf0f1;
+        }
+
+        .log-entry { margin-bottom: 8px; line-height: 1.4; animation: fadeIn 0.3s ease-out forwards; opacity: 0; }
+        .log-phase { color: #f39c12; font-weight: bold; margin-top: 10px; padding-bottom: 3px; border-bottom: 1px solid #34495e;}
+        .log-success { color: #2ecc71; }
+        .log-error { color: #e74c3c; font-weight: bold; background: rgba(231, 76, 60, 0.1); padding: 2px 5px;}
+        .log-ai { color: #3498db; font-style: italic; border-left: 3px solid #3498db; padding-left: 10px; margin: 10px 0; background: rgba(52, 152, 219, 0.1); padding: 10px;}
+        .log-asm { color: #bdc3c7; font-family: 'Fira Code', monospace; padding-left: 15px; border-left: 2px solid #7f8c8d; margin: 5px 0;}
+        .log-optasm { color: #e67e22; font-family: 'Fira Code', monospace; padding-left: 15px; border-left: 2px solid #d35400; margin: 5px 0;}
+        .log-normal { color: #ecf0f1; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        #console::-webkit-scrollbar { width: 8px; }
+        #console::-webkit-scrollbar-track { background: #060a0d; }
+        #console::-webkit-scrollbar-thumb { background: #2c3e50; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <div class="stars"></div>
+    <div class="castle-bg"></div>
+    <div class="flyer flyer1"></div>
+    <div class="flyer flyer2"></div>
+    <div class="flyer flyer3"></div>
+
+    <div class="parchment">
+        <h1>Department of Magical Syntax</h1>
+
+        <div class="dashboard">
+            <div id="phase-indicator" class="phase-indicator">Awaiting Incantation...</div>
+            <div id="ai-status" class="ai-status">Checking AI agent...</div>
+        </div>
+
+        <div class="instructions">
+            The AI agent now acts across the pipeline! It explains <b>Type Errors</b>, and if your code
+            passes, it steps in during <b>Code Generation</b> to optimize your output — powered live by
+            the OpenAI AI agent on the backend.
+        </div>
+
+        <textarea id="editor" spellcheck="false">
+#include <iostream>
+using namespace std;
+
+int main() {
+    // Perfect declarations
+    int galleons = 150;
+    string house = "Gryffindor";
+    float potion_score = 9.5;
+
+    return 0;
+}</textarea>
+
+        <div class="controls">
+            <button id="run-btn" onclick="runCompilerPipeline()">Run Compiler Pipeline</button>
+            <button id="ai-btn" onclick="requestAIHelp()">Ask Sorting Hat for Help!</button>
+        </div>
+
+        <div class="pensieve-wrapper">
+            <div id="console"></div>
+        </div>
+    </div>
+
+    <script>window.HOGWARTS_API_BASE = 'https://hogwarts-compiler.onrender.com';</script>
+    <script>
+        // -----------------------------------------------------------------
+        // Point this at your deployed Render backend. For local dev, leave
+        // it as localhost:4000 (the default backend port).
+        // -----------------------------------------------------------------
+        const API_BASE = window.HOGWARTS_API_BASE || 'http://localhost:4000';
+
+        const editor = document.getElementById('editor');
+        const terminal = document.getElementById('console');
+        const phaseIndicator = document.getElementById('phase-indicator');
+        const aiStatus = document.getElementById('ai-status');
+        const aiBtn = document.getElementById('ai-btn');
+        const runBtn = document.getElementById('run-btn');
+
+        let aiMode = ''; // 'error' or 'optimize'
+        let pendingErrorContext = null;
+        let pendingOptimizePayload = null;
+
+        function logToPensieve(message, type = 'normal') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+
+            let prefix = '';
+            if (type === 'phase') prefix = '⚙️ ';
+            if (type === 'error') prefix = '⚡ [TYPE ERROR] ';
+            if (type === 'success') prefix = '🪄 [OK] ';
+            if (type === 'ai') prefix = '🧙\u200d♂️ [SORTING HAT AI] ';
+
+            entry.innerHTML = `<strong>${prefix}</strong> ${message}`;
+            terminal.appendChild(entry);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function clearPensieve() { terminal.innerHTML = ''; }
+
+        async function checkAIHealth() {
+            try {
+                const res = await fetch(`${API_BASE}/api/health`);
+                const data = await res.json();
+                aiStatus.textContent = data.aiConfigured
+                    ? `AI agent online (${data.model})`
+                    : 'AI agent in fallback mode (no OPENAI_API_KEY set)';
+            } catch (e) {
+                aiStatus.textContent = 'Backend unreachable — check API_BASE';
+            }
+        }
+
+        async function runCompilerPipeline() {
+            clearPensieve();
+            aiBtn.style.display = 'none';
+            runBtn.disabled = true;
+            phaseIndicator.style.color = 'var(--slytherin-green)';
+            phaseIndicator.textContent = 'Phase: Semantic Analysis...';
+            logToPensieve('[PHASE 1 & 2] Semantic Analysis (Type Checking)', 'phase');
+
+            try {
+                const res = await fetch(`${API_BASE}/api/pipeline/run`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: editor.value }),
+                });
+                const data = await res.json();
+
+                if (data.hasError) {
+                    const { line, varName, expected, actual } = data.errorContext;
+                    logToPensieve(
+                        `Line ${line}: Type mismatch! Declared <code>${expected}</code>, but assigned a <code>${actual}</code>.`,
+                        'error'
+                    );
+                    phaseIndicator.textContent = 'Compilation Halted: Type Error';
+                    phaseIndicator.style.color = 'var(--gryffindor-red)';
+                    logToPensieve('Pipeline halted. See the type error above.', 'error');
+
+                    aiMode = 'error';
+                    pendingErrorContext = data.errorContext;
+                    aiBtn.textContent = 'Ask Sorting Hat for Help!';
+                    setTimeout(() => { aiBtn.style.display = 'inline-block'; }, 400);
+                } else {
+                    phaseIndicator.textContent = 'Phase: Code Generation...';
+                    logToPensieve('[PHASE 3] Standard Code Generation (Unoptimized)', 'phase');
+                    if (data.declarations.length === 0) {
+                        logToPensieve('No variables found to compile.', 'normal');
+                    } else {
+                        data.asm.forEach((line) => logToPensieve(line, 'asm'));
+                        logToPensieve('Standard compilation complete.', 'success');
+                    }
+                    phaseIndicator.textContent = 'Compilation Successful!';
+
+                    if (data.declarations.length > 0) {
+                        aiMode = 'optimize';
+                        pendingOptimizePayload = { declarations: data.declarations, asm: data.asm };
+                        aiBtn.textContent = 'Ask AI to Optimize Code';
+                        setTimeout(() => { aiBtn.style.display = 'inline-block'; }, 600);
+                    }
+                }
+            } catch (err) {
+                logToPensieve(`Could not reach the backend at ${API_BASE}. Is it running?`, 'error');
+                phaseIndicator.textContent = 'Backend Unreachable';
+                phaseIndicator.style.color = 'var(--gryffindor-red)';
+            } finally {
+                runBtn.disabled = false;
+            }
+        }
+
+        async function requestAIHelp() {
+            aiBtn.style.display = 'none';
+            aiBtn.disabled = true;
+
+            try {
+                if (aiMode === 'error' && pendingErrorContext) {
+                    const res = await fetch(`${API_BASE}/api/ai/explain-error`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(pendingErrorContext),
+                    });
+                    const data = await res.json();
+                    logToPensieve(data.explanation, 'ai');
+                    if (data.source === 'fallback') {
+                        logToPensieve('(AI agent unavailable — showing built-in fallback advice.)', 'normal');
+                    }
+                } else if (aiMode === 'optimize' && pendingOptimizePayload) {
+                    const res = await fetch(`${API_BASE}/api/ai/optimize`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(pendingOptimizePayload),
+                    });
+                    const data = await res.json();
+                    logToPensieve(data.explanation, 'ai');
+                    logToPensieve('; --- AI OPTIMIZED ASSEMBLY (REGISTER ALLOCATION) ---', 'optasm');
+                    (data.optimizedAsm || '').split('\n').forEach((line) => {
+                        if (line.trim()) logToPensieve(line, 'optasm');
+                    });
+                    if (data.source === 'fallback') {
+                        logToPensieve('(AI agent unavailable — showing built-in fallback optimization.)', 'normal');
+                    } else {
+                        logToPensieve('There! Much swifter execution. 10 points for efficient architecture!', 'ai');
+                    }
+                }
+            } catch (err) {
+                logToPensieve('The Sorting Hat could not be reached. Try again in a moment.', 'error');
+            } finally {
+                aiBtn.disabled = false;
+            }
+        }
+
+        checkAIHealth();
+    </script>
+</body>
+</html>
